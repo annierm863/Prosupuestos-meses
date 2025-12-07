@@ -8,7 +8,9 @@ body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
-  padding: 10px;
+  padding: 0;
+  margin: 0;
+  overflow-x: hidden;
 }
 
 .header {
@@ -77,8 +79,8 @@ body {
 
 .sidebar {
   width: 280px;
-  background: linear-gradient(180deg, #2d3748 0%, #1a202c 100%);
-  color: white;
+  background: linear-gradient(180deg, #2d3748 0%, #1a202c 100%) !important;
+  color: white !important;
   position: fixed;
   left: 0;
   top: 0;
@@ -87,6 +89,40 @@ body {
   z-index: 1000;
   transition: transform 0.3s ease;
   box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Forzar colores en sidebar - aplicar a todos los elementos */
+.sidebar,
+.sidebar * {
+  color: white !important;
+}
+
+.sidebar a,
+.sidebar a:link,
+.sidebar a:visited {
+  color: rgba(255, 255, 255, 0.8) !important;
+  text-decoration: none !important;
+}
+
+.sidebar a:hover {
+  color: white !important;
+  text-decoration: none !important;
+}
+
+.sidebar .nav-item.active,
+.sidebar .nav-item.active *,
+.sidebar .nav-item.active .nav-text {
+  color: white !important;
+}
+
+.sidebar .nav-category-header,
+.sidebar .nav-category-header *,
+.sidebar .nav-category-header .nav-text {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.sidebar .nav-text {
+  color: inherit !important;
 }
 
 .sidebar.collapsed {
@@ -106,6 +142,7 @@ body {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+  color: white !important;
 }
 
 .sidebar-toggle {
@@ -127,24 +164,52 @@ body {
   display: flex;
   align-items: center;
   padding: 12px 20px;
-  color: rgba(255, 255, 255, 0.8);
-  text-decoration: none;
+  color: rgba(255, 255, 255, 0.8) !important;
+  text-decoration: none !important;
   transition: all 0.3s;
   border-left: 3px solid transparent;
   cursor: pointer;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.nav-item:visited,
+.nav-item:link,
+.nav-item:active {
+  color: rgba(255, 255, 255, 0.8) !important;
+  text-decoration: none !important;
+}
+
+.nav-item .nav-text {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.nav-item.active .nav-text {
+  color: white !important;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
   border-left-color: #667eea;
 }
 
+.nav-item:hover .nav-text {
+  color: white !important;
+}
+
 .nav-item.active {
-  background: rgba(102, 126, 234, 0.2);
-  color: white;
+  background: rgba(102, 126, 234, 0.2) !important;
+  color: white !important;
   border-left-color: #667eea;
   font-weight: 600;
+}
+
+.nav-item.active .nav-text,
+.nav-item.active .nav-icon {
+  color: white !important;
 }
 
 .nav-icon {
@@ -157,6 +222,7 @@ body {
 .nav-text {
   flex: 1;
   font-size: 14px;
+  color: inherit !important;
 }
 
 .nav-category {
@@ -167,13 +233,21 @@ body {
   display: flex;
   align-items: center;
   padding: 12px 20px;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.9) !important;
   cursor: pointer;
   transition: all 0.3s;
   font-weight: 600;
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.nav-category-header * {
+  color: inherit !important;
 }
 
 .nav-category-header:hover {
@@ -236,7 +310,9 @@ body {
   margin-left: 280px;
   flex: 1;
   transition: margin-left 0.3s ease;
-  min-height: calc(100vh - 20px);
+  min-height: 100vh;
+  background: #f5f5f5;
+  width: calc(100% - 280px);
 }
 
 .main-content.expanded {
@@ -911,5 +987,34 @@ button:disabled {
     font-size: 18px;
     margin-right: 10px;
   }
+}
+
+/* ============= ESTILOS ADICIONALES PARA SIDEBAR ============= */
+/* Asegurar que todos los textos en el sidebar sean blancos */
+.sidebar h3,
+.sidebar h4,
+.sidebar p,
+.sidebar span,
+.sidebar div {
+  color: white !important;
+}
+
+/* Asegurar que los enlaces no tengan subrayado */
+.sidebar a {
+  text-decoration: none !important;
+  outline: none !important;
+}
+
+/* Asegurar que los botones del sidebar tengan el estilo correcto */
+.sidebar button {
+  color: white !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Asegurar que los iconos se vean bien */
+.sidebar .nav-icon {
+  filter: none !important;
+  opacity: 1 !important;
 }
 
