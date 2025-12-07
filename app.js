@@ -17,7 +17,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -45,7 +44,6 @@ window.firestore = {
   deleteDoc,
   query,
   where,
-  orderBy,
   Timestamp,
 };
 
