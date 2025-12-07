@@ -55,48 +55,52 @@ let editingItem = null;
 let editingType = null;
 
 // ============= CACHÉ LOCAL =============
-const cache = {
-  weeks: null,
-  incomes: {},
-  expenses: {},
-  workExpenses: {},
-  goals: null,
-  monthlyData: {},
-  cacheTimestamp: {},
-  CACHE_DURATION: 5 * 60 * 1000, // 5 minutos
+const cache = (function() {
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+  const data = {
+    weeks: null,
+    incomes: {},
+    expenses: {},
+    workExpenses: {},
+    goals: null,
+    monthlyData: {},
+  };
+  const timestamps = {};
 
-  get(key, subKey = null) {
-    const cacheKey = subKey ? `${key}_${subKey}` : key;
-    const cached = this[cacheKey];
-    const timestamp = this.cacheTimestamp[cacheKey];
+  return {
+    get(key, subKey = null) {
+      const cacheKey = subKey ? `${key}_${subKey}` : key;
+      const cached = data[cacheKey];
+      const timestamp = timestamps[cacheKey];
 
-    if (cached && timestamp && Date.now() - timestamp < this.CACHE_DURATION) {
-      return cached;
-    }
-    return null;
-  },
+      if (cached !== undefined && cached !== null && timestamp && Date.now() - timestamp < CACHE_DURATION) {
+        return cached;
+      }
+      return null;
+    },
 
-  set(key, value, subKey = null) {
-    const cacheKey = subKey ? `${key}_${subKey}` : key;
-    this[cacheKey] = value;
-    this.cacheTimestamp[cacheKey] = Date.now();
-  },
+    set(key, value, subKey = null) {
+      const cacheKey = subKey ? `${key}_${subKey}` : key;
+      data[cacheKey] = value;
+      timestamps[cacheKey] = Date.now();
+    },
 
-  clear(key = null) {
-    if (key) {
-      this[key] = null;
-      this.cacheTimestamp[key] = null;
-    } else {
-      // Limpiar todo el caché
-      Object.keys(this).forEach((k) => {
-        if (k !== "CACHE_DURATION" && k !== "cacheTimestamp") {
-          this[k] = k.includes("cache") ? {} : null;
-        }
-      });
-      this.cacheTimestamp = {};
-    }
-  },
-};
+    clear(key = null) {
+      if (key) {
+        data[key] = typeof data[key] === "object" && !Array.isArray(data[key]) ? {} : null;
+        timestamps[key] = null;
+      } else {
+        // Limpiar todo el caché
+        Object.keys(data).forEach((k) => {
+          data[k] = typeof data[k] === "object" && !Array.isArray(data[k]) ? {} : null;
+        });
+        Object.keys(timestamps).forEach((k) => {
+          timestamps[k] = null;
+        });
+      }
+    },
+  };
+})();
 
 // ============= FUNCIONES DE LOADING =============
 function showLoading(message = "Cargando datos...") {
@@ -423,13 +427,15 @@ window.createWeek = async function () {
 
 async function loadWeeks() {
   // Verificar caché
-  const cached = cache.get("weeks");
-  if (cached) {
-    displayWeeks(cached);
-    if (cached.length > 0 && !currentWeek) {
-      currentWeek = cached[0];
+  if (cache && typeof cache.get === 'function') {
+    const cached = cache.get("weeks");
+    if (cached) {
+      displayWeeks(cached);
+      if (cached.length > 0 && !currentWeek) {
+        currentWeek = cached[0];
+      }
+      return;
     }
-    return;
   }
 
   try {
@@ -448,7 +454,9 @@ async function loadWeeks() {
     // Ordenar por fecha de inicio (más reciente primero) en JavaScript
     weeks.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
 
-    cache.set("weeks", weeks);
+    if (cache && typeof cache.set === 'function') {
+      cache.set("weeks", weeks);
+    }
     displayWeeks(weeks);
 
     // Seleccionar la semana más reciente como activa
