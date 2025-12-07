@@ -1263,7 +1263,8 @@ async function updateDashboard() {
     const totalProgrammed = programmedExpenses.reduce((sum, e) => sum + e.amount, 0);
     const totalUnprogrammed = unprogrammedExpenses.reduce((sum, e) => sum + e.amount, 0);
     const totalWork = workExpenses.reduce((sum, e) => sum + e.amount, 0);
-    const totalExpenses = totalProgrammed + totalUnprogrammed + totalWork;
+    // Los gastos de trabajo NO se incluyen en el presupuesto semanal (control separado)
+    const totalExpenses = totalProgrammed + totalUnprogrammed;
 
     const balance = totalIncome - totalExpenses;
     const debtPayment = balance > 0 ? balance * 0.6 : 0;
@@ -1302,14 +1303,6 @@ async function updateDashboard() {
         click: "showUnprogrammedDetail",
       },
       {
-        title: "Gastos de Trabajo",
-        value: `$${totalWork.toFixed(2)}`,
-        subtitle: `${workExpenses.length} gastos`,
-        color1: "#8b5cf6",
-        color2: "#7c3aed",
-        click: "showWorkDetail",
-      },
-      {
         title: "Balance Final",
         value: `$${balance.toFixed(2)}`,
         color1: balance >= 0 ? "#10b981" : "#ef4444",
@@ -1337,16 +1330,19 @@ async function updateDashboard() {
       )
       .join("");
 
-    // Calcular salud financiera
+    // Mostrar sección separada de gastos de trabajo
+    displayWorkExpensesSection(totalWork, workExpenses.length);
+
+    // Calcular salud financiera (sin incluir gastos de trabajo)
     updateFinancialHealth(totalIncome, totalExpenses, totalUnprogrammed, debtPayment);
 
-    // Crear gráficos
+    // Crear gráficos (sin incluir gastos de trabajo en el gráfico principal)
     try {
       const chartData = {
         totalIncome,
         totalProgrammed,
         totalUnprogrammed,
-        totalWork,
+        totalWork: 0, // No incluir en el gráfico del presupuesto
       };
       createDashboardChart(chartData);
 
@@ -1373,6 +1369,32 @@ async function updateDashboard() {
     showMessage(errorMessage, "error");
     console.error("Error en updateDashboard:", error);
   }
+}
+
+// Función para mostrar la sección separada de gastos de trabajo
+function displayWorkExpensesSection(totalWork, count) {
+  const section = document.getElementById("workExpensesSection");
+  const dashboard = document.getElementById("workExpensesDashboard");
+  
+  if (!section || !dashboard) return;
+
+  if (totalWork === 0 && count === 0) {
+    section.style.display = "none";
+    return;
+  }
+
+  section.style.display = "block";
+  dashboard.innerHTML = `
+    <div class="card" style="--color1: #8b5cf6; --color2: #7c3aed;" onclick="showWorkDetail()">
+      <div class="card-title">Total Gastos de Trabajo</div>
+      <div class="card-value">$${totalWork.toFixed(2)}</div>
+      <div class="card-subtitle">${count} registro(s)</div>
+    </div>
+    <div class="card" style="--color1: #6366f1; --color2: #4f46e5;">
+      <div class="card-title">💰 Control Separado</div>
+      <div class="card-value" style="font-size: 18px;">No afecta el presupuesto semanal</div>
+    </div>
+  `;
 }
 
 function updateFinancialHealth(income, expenses, unprogrammed, debtPayment) {
@@ -1528,9 +1550,8 @@ window.showDebtDetail = async function () {
   const workExpenses = await getWeekData("workExpenses", currentWeek.id);
 
   const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0);
-  const totalExpenses =
-    expenses.reduce((sum, e) => sum + e.amount, 0) +
-    workExpenses.reduce((sum, w) => sum + w.amount, 0);
+  // Los gastos de trabajo NO se incluyen en el cálculo del balance
+  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const balance = totalIncome - totalExpenses;
   const debtPayment = balance > 0 ? balance * 0.6 : 0;
   const freeMoney = balance > 0 ? balance * 0.4 : 0;
@@ -1710,7 +1731,8 @@ async function loadMonthlyData(month, year) {
         .filter((e) => e.type === "unprogrammed")
         .reduce((sum, e) => sum + e.amount, 0);
       const weekWork = workExpenses.reduce((sum, w) => sum + w.amount, 0);
-      const weekExpenses = weekProgrammed + weekUnprogrammed + weekWork;
+      // Los gastos de trabajo NO se incluyen en el presupuesto semanal
+      const weekExpenses = weekProgrammed + weekUnprogrammed;
       const weekBalance = weekIncome - weekExpenses;
       const weekDebt = weekBalance > 0 ? weekBalance * 0.6 : 0;
 
@@ -1737,9 +1759,17 @@ async function loadMonthlyData(month, year) {
       {
         title: "Gastos del Mes",
         value: `$${totalExpenses.toFixed(2)}`,
+        subtitle: "(Sin gastos de trabajo)",
         color1: "#ef4444",
         color2: "#dc2626",
         click: "showMonthExpenseDetail",
+      },
+      {
+        title: "Gastos de Trabajo",
+        value: `$${totalWork.toFixed(2)}`,
+        subtitle: "Control separado",
+        color1: "#8b5cf6",
+        color2: "#7c3aed",
       },
       {
         title: "Balance del Mes",
@@ -1772,12 +1802,6 @@ async function loadMonthlyData(month, year) {
         color1: "#ef4444",
         color2: "#dc2626",
       },
-      {
-        title: "Gastos de Trabajo",
-        value: `$${totalWork.toFixed(2)}`,
-        color1: "#8b5cf6",
-        color2: "#7c3aed",
-      },
     ];
 
     const cardsHTML = cards
@@ -1786,6 +1810,7 @@ async function loadMonthlyData(month, year) {
       <div class="card" style="--color1: ${card.color1}; --color2: ${card.color2};" ${card.click ? `onclick="${card.click}()"` : ""}>
         <div class="card-title">${card.title}</div>
         <div class="card-value">${card.value}</div>
+        ${card.subtitle ? `<div class="card-subtitle">${card.subtitle}</div>` : ""}
       </div>
     `
       )
@@ -1860,7 +1885,8 @@ window.showWeekDetail = async function (weekId) {
     const totalProgrammed = programmed.reduce((sum, e) => sum + e.amount, 0);
     const totalUnprogrammed = unprogrammed.reduce((sum, e) => sum + e.amount, 0);
     const totalWork = workExpenses.reduce((sum, w) => sum + w.amount, 0);
-    const totalExpenses = totalProgrammed + totalUnprogrammed + totalWork;
+    // Los gastos de trabajo NO se incluyen en el presupuesto semanal
+    const totalExpenses = totalProgrammed + totalUnprogrammed;
     const balance = totalIncome - totalExpenses;
     const debtPayment = balance > 0 ? balance * 0.6 : 0;
     const freeMoney = balance > 0 ? balance * 0.4 : 0;
@@ -1877,8 +1903,14 @@ window.showWeekDetail = async function (weekId) {
           <div class="card-value">$${totalIncome.toFixed(2)}</div>
         </div>
         <div class="card" style="--color1: #ef4444; --color2: #dc2626;">
-          <div class="card-title">Gastos</div>
+          <div class="card-title">Gastos del Presupuesto</div>
           <div class="card-value">$${totalExpenses.toFixed(2)}</div>
+          <div class="card-subtitle">(Sin gastos de trabajo)</div>
+        </div>
+        <div class="card" style="--color1: #8b5cf6; --color2: #7c3aed;">
+          <div class="card-title">Gastos de Trabajo</div>
+          <div class="card-value">$${totalWork.toFixed(2)}</div>
+          <div class="card-subtitle">Control separado</div>
         </div>
         <div class="card" style="--color1: ${balance >= 0 ? "#10b981" : "#ef4444"}; --color2: ${balance >= 0 ? "#059669" : "#dc2626"};">
           <div class="card-title">Balance</div>
@@ -1902,8 +1934,11 @@ window.showWeekDetail = async function (weekId) {
           <span class="health-value">$${totalUnprogrammed.toFixed(2)}</span>
         </div>
         <div class="health-indicator">
-          <span class="health-label">🚗 Gastos de Trabajo:</span>
+          <span class="health-label">🚗 Gastos de Trabajo (Separado):</span>
           <span class="health-value">$${totalWork.toFixed(2)}</span>
+        </div>
+        <div style="margin-top: 10px; padding: 10px; background: #e0e7ff; border-radius: 5px; color: #4f46e5; font-size: 12px;">
+          ⚠️ Los gastos de trabajo son un control separado y NO afectan el balance del presupuesto semanal
         </div>
       </div>
 
@@ -2000,9 +2035,8 @@ window.showMonthDebtDetail = async function () {
     const workExpenses = await getWeekData("workExpenses", week.id);
 
     const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0);
-    const totalExpenses =
-      expenses.reduce((sum, e) => sum + e.amount, 0) +
-      workExpenses.reduce((sum, w) => sum + w.amount, 0);
+    // Los gastos de trabajo NO se incluyen en el cálculo del balance
+    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
     const balance = totalIncome - totalExpenses;
     const debt = balance > 0 ? balance * 0.6 : 0;
 
@@ -2109,7 +2143,8 @@ window.exportMonthlyPDF = async function () {
         .filter((e) => e.type === "unprogrammed")
         .reduce((sum, e) => sum + e.amount, 0);
       const weekWork = workExpenses.reduce((sum, w) => sum + w.amount, 0);
-      const weekExpenses = weekProgrammed + weekUnprogrammed + weekWork;
+      // Los gastos de trabajo NO se incluyen en el presupuesto semanal
+      const weekExpenses = weekProgrammed + weekUnprogrammed;
       
       totalIncome += weekIncome;
       totalExpenses += weekExpenses;
@@ -2127,8 +2162,12 @@ window.exportMonthlyPDF = async function () {
       doc.setFont(undefined, "normal");
       doc.text(`Ingresos: $${weekIncome.toFixed(2)}`, margin, yPos);
       doc.text(`Gastos: $${weekExpenses.toFixed(2)}`, margin + 60, yPos);
-      doc.text(`Balance: $${(weekIncome - weekExpenses).toFixed(2)}`, margin + 120, yPos);
-      yPos += 10;
+      doc.text(`Trabajo: $${weekWork.toFixed(2)}`, margin + 120, yPos);
+      yPos += 5;
+      doc.text(`Balance: $${(weekIncome - weekExpenses).toFixed(2)}`, margin, yPos);
+      doc.setFontSize(8);
+      doc.text(`(Gastos trabajo no incluidos)`, margin + 60, yPos);
+      yPos += 8;
     }
     
     // Resumen total
@@ -2146,16 +2185,21 @@ window.exportMonthlyPDF = async function () {
     doc.setFont(undefined, "normal");
     doc.text(`Total Ingresos: $${totalIncome.toFixed(2)}`, margin, yPos);
     yPos += 7;
-    doc.text(`Total Gastos: $${totalExpenses.toFixed(2)}`, margin, yPos);
+    doc.text(`Total Gastos del Presupuesto: $${totalExpenses.toFixed(2)}`, margin, yPos);
     yPos += 7;
     doc.text(`Gastos Programados: $${totalProgrammed.toFixed(2)}`, margin, yPos);
     yPos += 7;
     doc.text(`Gastos No Programados: $${totalUnprogrammed.toFixed(2)}`, margin, yPos);
     yPos += 7;
-    doc.text(`Gastos de Trabajo: $${totalWork.toFixed(2)}`, margin, yPos);
+    doc.text(`Gastos de Trabajo (Separado): $${totalWork.toFixed(2)}`, margin, yPos);
+    yPos += 5;
+    doc.setFontSize(9);
+    doc.text(`(No incluido en el presupuesto)`, margin + 5, yPos);
     yPos += 7;
     
+    doc.setFontSize(12);
     doc.setFont(undefined, "bold");
+    // Balance sin incluir gastos de trabajo
     const balance = totalIncome - totalExpenses;
     doc.text(`Balance Final: $${balance.toFixed(2)}`, margin, yPos);
     yPos += 7;
