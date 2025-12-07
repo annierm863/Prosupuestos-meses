@@ -364,6 +364,22 @@ async function initApp() {
     setDefaultDates();
     await updateDashboard();
     await loadGoals();
+    
+    // Inicializar sidebar: expandir categoría activa si hay un item activo
+    const activeItem = document.querySelector(".nav-item.active");
+    if (activeItem) {
+      const category = activeItem.closest(".nav-category");
+      if (category) {
+        const categoryHeader = category.querySelector(".nav-category-header");
+        if (categoryHeader) {
+          categoryHeader.classList.add("active");
+          const submenu = categoryHeader.nextElementSibling;
+          if (submenu) {
+            submenu.classList.add("active");
+          }
+        }
+      }
+    }
   } catch (error) {
     showMessage("Error al inicializar la aplicación: " + error.message, "error");
     console.error("Error en initApp:", error);
@@ -2508,16 +2524,44 @@ window.deleteGoal = async function (id) {
   }
 };
 
-// ============= NAVEGACIÓN (BUG FIXED) =============
+// ============= NAVEGACIÓN CON SIDEBAR =============
+
+// Toggle sidebar (para móvil)
+window.toggleSidebar = function () {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebarOverlay");
+  const mainContent = document.getElementById("mainContent");
+  
+  sidebar.classList.toggle("collapsed");
+  overlay.classList.toggle("show");
+  
+  if (window.innerWidth <= 768) {
+    if (sidebar.classList.contains("collapsed")) {
+      mainContent.classList.add("expanded");
+    } else {
+      mainContent.classList.remove("expanded");
+    }
+  }
+};
+
+// Toggle categorías del menú
+window.toggleCategory = function (element) {
+  element.classList.toggle("active");
+  const submenu = element.nextElementSibling;
+  if (submenu) {
+    submenu.classList.toggle("active");
+  }
+};
+
 window.showTab = async function (tabName, element = null) {
   // Ocultar todas las secciones
   document.querySelectorAll(".section").forEach((section) => {
     section.classList.remove("active");
   });
 
-  // Desactivar todos los tabs
-  document.querySelectorAll(".tab").forEach((tab) => {
-    tab.classList.remove("active");
+  // Desactivar todos los items del menú
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    item.classList.remove("active");
   });
 
   // Activar la sección
@@ -2526,16 +2570,46 @@ window.showTab = async function (tabName, element = null) {
     section.classList.add("active");
   }
 
-  // Activar el tab correspondiente
+  // Activar el item del menú correspondiente
   if (element) {
     element.classList.add("active");
+    // Expandir la categoría padre si existe
+    const category = element.closest(".nav-category");
+    if (category) {
+      const categoryHeader = category.querySelector(".nav-category-header");
+      if (categoryHeader && !categoryHeader.classList.contains("active")) {
+        categoryHeader.classList.add("active");
+        const submenu = categoryHeader.nextElementSibling;
+        if (submenu) {
+          submenu.classList.add("active");
+        }
+      }
+    }
   } else {
-    // Buscar el tab por su onclick
-    document.querySelectorAll(".tab").forEach((tab) => {
-      if (tab.getAttribute("onclick")?.includes(tabName)) {
-        tab.classList.add("active");
+    // Buscar el item por el tabName
+    document.querySelectorAll(".nav-item").forEach((item) => {
+      const onclick = item.getAttribute("onclick");
+      if (onclick && onclick.includes(tabName)) {
+        item.classList.add("active");
+        // Expandir la categoría padre
+        const category = item.closest(".nav-category");
+        if (category) {
+          const categoryHeader = category.querySelector(".nav-category-header");
+          if (categoryHeader) {
+            categoryHeader.classList.add("active");
+            const submenu = categoryHeader.nextElementSibling;
+            if (submenu) {
+              submenu.classList.add("active");
+            }
+          }
+        }
       }
     });
+  }
+
+  // Cerrar sidebar en móvil después de seleccionar
+  if (window.innerWidth <= 768) {
+    toggleSidebar();
   }
 
   // Cargar datos de las nuevas secciones cuando se seleccionen

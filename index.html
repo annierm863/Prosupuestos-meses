@@ -45,38 +45,141 @@
 
     <!-- Aplicación principal -->
     <div id="mainApp" class="container" style="display: none">
-      <div class="header">
-        <h1>💰 Control de Presupuesto Personal</h1>
-        <div class="user-info">
-          <span id="userEmail"></span>
-          <br />
-          <button class="logout-btn" onclick="logout()">Cerrar Sesión</button>
+      <!-- Menú Lateral (Sidebar) -->
+      <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <h3>📊 Menú</h3>
+          <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+            <span>☰</span>
+          </button>
         </div>
+        
+        <nav class="sidebar-nav">
+          <!-- Dashboard -->
+          <a href="#" class="nav-item active" onclick="showTab('dashboard', this); return false;">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Dashboard</span>
+          </a>
+
+          <!-- Gestión Semanal -->
+          <div class="nav-category">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+              <span class="nav-icon">📅</span>
+              <span class="nav-text">Gestión Semanal</span>
+              <span class="nav-arrow">▼</span>
+            </div>
+            <div class="nav-submenu">
+              <a href="#" class="nav-item" onclick="showTab('weeks', this); return false;">
+                <span class="nav-icon">📆</span>
+                <span class="nav-text">Semanas</span>
+              </a>
+              <a href="#" class="nav-item" onclick="showTab('income', this); return false;">
+                <span class="nav-icon">💵</span>
+                <span class="nav-text">Ingresos</span>
+              </a>
+              <a href="#" class="nav-item" onclick="showTab('expenses', this); return false;">
+                <span class="nav-icon">💸</span>
+                <span class="nav-text">Gastos</span>
+              </a>
+              <a href="#" class="nav-item" onclick="showTab('work-expenses', this); return false;">
+                <span class="nav-icon">🚗</span>
+                <span class="nav-text">Gastos Trabajo</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Análisis -->
+          <div class="nav-category">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+              <span class="nav-icon">📈</span>
+              <span class="nav-text">Análisis</span>
+              <span class="nav-arrow">▼</span>
+            </div>
+            <div class="nav-submenu">
+              <a href="#" class="nav-item" onclick="showTab('monthly', this); return false;">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Resumen Mensual</span>
+              </a>
+              <a href="#" class="nav-item" onclick="showTab('trends', this); return false;">
+                <span class="nav-icon">📉</span>
+                <span class="nav-text">Tendencias</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Planificación -->
+          <div class="nav-category">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+              <span class="nav-icon">🎯</span>
+              <span class="nav-text">Planificación</span>
+              <span class="nav-arrow">▼</span>
+            </div>
+            <div class="nav-submenu">
+              <a href="#" class="nav-item" onclick="showTab('goals', this); return false;">
+                <span class="nav-icon">🎯</span>
+                <span class="nav-text">Metas</span>
+              </a>
+              <a href="#" class="nav-item" onclick="showTab('budgets', this); return false;">
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">Presupuestos</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Patrimonio -->
+          <div class="nav-category">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+              <span class="nav-icon">💰</span>
+              <span class="nav-text">Patrimonio</span>
+              <span class="nav-arrow">▼</span>
+            </div>
+            <div class="nav-submenu">
+              <a href="#" class="nav-item" onclick="showTab('networth', this); return false;">
+                <span class="nav-icon">💎</span>
+                <span class="nav-text">Patrimonio Neto</span>
+              </a>
+              <a href="#" class="nav-item" onclick="showTab('investments', this); return false;">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Inversiones</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Libertad Financiera -->
+          <div class="nav-category">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+              <span class="nav-icon">🚀</span>
+              <span class="nav-text">Libertad Financiera</span>
+              <span class="nav-arrow">▼</span>
+            </div>
+            <div class="nav-submenu">
+              <a href="#" class="nav-item" onclick="showTab('freedom', this); return false;">
+                <span class="nav-icon">🚀</span>
+                <span class="nav-text">Calculadora</span>
+              </a>
+              <a href="#" class="nav-item" onclick="showTab('debts', this); return false;">
+                <span class="nav-icon">💳</span>
+                <span class="nav-text">Deudas</span>
+              </a>
+            </div>
+          </div>
+        </nav>
       </div>
 
-      <div class="tabs">
-        <button class="tab active" onclick="showTab('dashboard', this)">
-          📊 Dashboard
-        </button>
-        <button class="tab" onclick="showTab('weeks', this)">📅 Semanas</button>
-        <button class="tab" onclick="showTab('income', this)">💵 Ingresos</button>
-        <button class="tab" onclick="showTab('expenses', this)">💸 Gastos</button>
-        <button class="tab" onclick="showTab('work-expenses', this)">
-          🚗 Gastos Trabajo
-        </button>
-        <button class="tab" onclick="showTab('monthly', this)">
-          📈 Resumen Mensual
-        </button>
-        <button class="tab" onclick="showTab('goals', this)">🎯 Metas</button>
-        <button class="tab" onclick="showTab('networth', this)">💰 Patrimonio</button>
-        <button class="tab" onclick="showTab('freedom', this)">🚀 Libertad Financiera</button>
-        <button class="tab" onclick="showTab('debts', this)">💳 Deudas</button>
-        <button class="tab" onclick="showTab('investments', this)">📊 Inversiones</button>
-        <button class="tab" onclick="showTab('budgets', this)">📋 Presupuestos</button>
-        <button class="tab" onclick="showTab('trends', this)">📉 Tendencias</button>
-      </div>
+      <!-- Overlay para móvil -->
+      <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
-      <div class="content">
+      <div class="main-content" id="mainContent">
+        <div class="header">
+          <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+          <h1>💰 Control de Presupuesto Personal</h1>
+          <div class="user-info">
+            <span id="userEmail"></span>
+            <br />
+            <button class="logout-btn" onclick="logout()">Cerrar Sesión</button>
+          </div>
+        </div>
+
         <!-- Dashboard -->
         <div id="dashboard" class="section active">
           <h2>Dashboard General</h2>
