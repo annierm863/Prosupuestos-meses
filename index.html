@@ -5,6 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Presupuesto Personal - Versión Ultimate</title>
     <link rel="stylesheet" href="./styles.css" />
+    <style>
+      /* ============= ESTILOS CRÍTICOS DEL SIDEBAR - PRIORIDAD MÁXIMA ============= */
+      #sidebar.sidebar,
+      .sidebar#sidebar {
+        width: 280px !important;
+        background: linear-gradient(180deg, #2d3748 0%, #1a202c 100%) !important;
+        color: white !important;
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
+        z-index: 1000 !important;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1) !important;
+      }
+      
+      /* Forzar color blanco en todos los elementos del sidebar */
+      #sidebar *,
+      .sidebar *,
+      #sidebar.sidebar * {
+        color: white !important;
+      }
+      
+      /* Estilos para enlaces */
+      #sidebar a,
+      #sidebar a:link,
+      #sidebar a:visited,
+      .sidebar a,
+      .sidebar a:link,
+      .sidebar a:visited {
+        color: rgba(255, 255, 255, 0.8) !important;
+        text-decoration: none !important;
+      }
+      
+      #sidebar a:hover,
+      .sidebar a:hover {
+        color: white !important;
+        text-decoration: none !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+      }
+      
+      /* Item activo */
+      #sidebar .nav-item.active,
+      #sidebar .nav-item.active *,
+      .sidebar .nav-item.active,
+      .sidebar .nav-item.active * {
+        color: white !important;
+        background: rgba(102, 126, 234, 0.2) !important;
+        border-left-color: #667eea !important;
+      }
+      
+      /* Headers de categorías */
+      #sidebar .nav-category-header,
+      #sidebar .nav-category-header *,
+      .sidebar .nav-category-header,
+      .sidebar .nav-category-header * {
+        color: rgba(255, 255, 255, 0.9) !important;
+      }
+      
+      /* Textos de navegación */
+      #sidebar .nav-text,
+      .sidebar .nav-text {
+        color: inherit !important;
+      }
+      
+      /* Todos los elementos de texto */
+      #sidebar h3,
+      #sidebar h4,
+      #sidebar p,
+      #sidebar span,
+      #sidebar div,
+      .sidebar h3,
+      .sidebar h4,
+      .sidebar p,
+      .sidebar span,
+      .sidebar div {
+        color: white !important;
+      }
+      
+      /* Iconos */
+      #sidebar .nav-icon,
+      .sidebar .nav-icon {
+        color: inherit !important;
+      }
+      
+      /* Header del sidebar */
+      #sidebar .sidebar-header,
+      .sidebar .sidebar-header {
+        padding: 20px !important;
+        background: rgba(0, 0, 0, 0.2) !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+      }
+      
+      #sidebar .sidebar-header h3,
+      .sidebar .sidebar-header h3 {
+        margin: 0 !important;
+        font-size: 18px !important;
+        font-weight: 600 !important;
+        color: white !important;
+      }
+      
+      /* Navegación */
+      #sidebar .sidebar-nav,
+      .sidebar .sidebar-nav {
+        padding: 10px 0 !important;
+      }
+    </style>
     <!-- Chart.js para gráficos -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <!-- jsPDF para exportación a PDF -->
@@ -12,12 +122,6 @@
   </head>
   <body>
     <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="loading-overlay">
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <p>Cargando datos...</p>
-      </div>
-    </div>
     <div id="loadingOverlay" class="loading-overlay">
       <div class="loading-content">
         <div class="loading-spinner"></div>
@@ -62,28 +166,28 @@
           </a>
 
           <!-- Gestión Semanal -->
-          <div class="nav-category">
-            <div class="nav-category-header" onclick="toggleCategory(this)">
-              <span class="nav-icon">📅</span>
-              <span class="nav-text">Gestión Semanal</span>
-              <span class="nav-arrow">▼</span>
+          <div class="nav-category" style="margin-top: 5px;">
+            <div class="nav-category-header" onclick="toggleCategory(this)" style="display: flex; align-items: center; padding: 12px 20px; color: rgba(255, 255, 255, 0.9) !important; cursor: pointer; transition: all 0.3s; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; background: transparent; border: none; width: 100%; text-align: left;">
+              <span class="nav-icon" style="font-size: 20px; margin-right: 12px; width: 24px; text-align: center; color: rgba(255, 255, 255, 0.9) !important;">📅</span>
+              <span class="nav-text" style="flex: 1; font-size: 13px; color: rgba(255, 255, 255, 0.9) !important;">Gestión Semanal</span>
+              <span class="nav-arrow" style="margin-left: auto; font-size: 12px; transition: transform 0.3s; color: rgba(255, 255, 255, 0.9) !important;">▼</span>
             </div>
-            <div class="nav-submenu">
-              <a href="#" class="nav-item" onclick="showTab('weeks', this); return false;">
-                <span class="nav-icon">📆</span>
-                <span class="nav-text">Semanas</span>
+            <div class="nav-submenu" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease; background: rgba(0, 0, 0, 0.2);">
+              <a href="#" class="nav-item" onclick="showTab('weeks', this); return false;" style="display: flex; align-items: center; padding: 12px 20px 12px 50px; color: rgba(255, 255, 255, 0.8) !important; text-decoration: none !important; transition: all 0.3s; border-left: 3px solid transparent; cursor: pointer; background: transparent; width: 100%; text-align: left; font-size: 13px;">
+                <span class="nav-icon" style="font-size: 16px; margin-right: 12px; width: 24px; text-align: center; color: rgba(255, 255, 255, 0.8) !important;">📆</span>
+                <span class="nav-text" style="flex: 1; font-size: 13px; color: rgba(255, 255, 255, 0.8) !important;">Semanas</span>
               </a>
-              <a href="#" class="nav-item" onclick="showTab('income', this); return false;">
-                <span class="nav-icon">💵</span>
-                <span class="nav-text">Ingresos</span>
+              <a href="#" class="nav-item" onclick="showTab('income', this); return false;" style="display: flex; align-items: center; padding: 12px 20px 12px 50px; color: rgba(255, 255, 255, 0.8) !important; text-decoration: none !important; transition: all 0.3s; border-left: 3px solid transparent; cursor: pointer; background: transparent; width: 100%; text-align: left; font-size: 13px;">
+                <span class="nav-icon" style="font-size: 16px; margin-right: 12px; width: 24px; text-align: center; color: rgba(255, 255, 255, 0.8) !important;">💵</span>
+                <span class="nav-text" style="flex: 1; font-size: 13px; color: rgba(255, 255, 255, 0.8) !important;">Ingresos</span>
               </a>
-              <a href="#" class="nav-item" onclick="showTab('expenses', this); return false;">
-                <span class="nav-icon">💸</span>
-                <span class="nav-text">Gastos</span>
+              <a href="#" class="nav-item" onclick="showTab('expenses', this); return false;" style="display: flex; align-items: center; padding: 12px 20px 12px 50px; color: rgba(255, 255, 255, 0.8) !important; text-decoration: none !important; transition: all 0.3s; border-left: 3px solid transparent; cursor: pointer; background: transparent; width: 100%; text-align: left; font-size: 13px;">
+                <span class="nav-icon" style="font-size: 16px; margin-right: 12px; width: 24px; text-align: center; color: rgba(255, 255, 255, 0.8) !important;">💸</span>
+                <span class="nav-text" style="flex: 1; font-size: 13px; color: rgba(255, 255, 255, 0.8) !important;">Gastos</span>
               </a>
-              <a href="#" class="nav-item" onclick="showTab('work-expenses', this); return false;">
-                <span class="nav-icon">🚗</span>
-                <span class="nav-text">Gastos Trabajo</span>
+              <a href="#" class="nav-item" onclick="showTab('work-expenses', this); return false;" style="display: flex; align-items: center; padding: 12px 20px 12px 50px; color: rgba(255, 255, 255, 0.8) !important; text-decoration: none !important; transition: all 0.3s; border-left: 3px solid transparent; cursor: pointer; background: transparent; width: 100%; text-align: left; font-size: 13px;">
+                <span class="nav-icon" style="font-size: 16px; margin-right: 12px; width: 24px; text-align: center; color: rgba(255, 255, 255, 0.8) !important;">🚗</span>
+                <span class="nav-text" style="flex: 1; font-size: 13px; color: rgba(255, 255, 255, 0.8) !important;">Gastos Trabajo</span>
               </a>
             </div>
           </div>
