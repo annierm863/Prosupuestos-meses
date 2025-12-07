@@ -435,10 +435,10 @@ async function loadWeeks() {
   }
 
   try {
+    // Usar solo where, ordenar en JavaScript para evitar necesidad de índice compuesto
     const q = query(
       collection(db, "weeks"),
-      where("userId", "==", currentUser.uid),
-      orderBy("startDate", "desc")
+      where("userId", "==", currentUser.uid)
     );
     const snapshot = await getDocs(q);
     const weeks = [];
@@ -446,6 +446,9 @@ async function loadWeeks() {
     snapshot.forEach((doc) => {
       weeks.push({ id: doc.id, ...doc.data() });
     });
+
+    // Ordenar por fecha de inicio (más reciente primero) en JavaScript
+    weeks.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
 
     cache.set("weeks", weeks);
     displayWeeks(weeks);
@@ -455,7 +458,8 @@ async function loadWeeks() {
       currentWeek = weeks[0];
     }
   } catch (error) {
-    showMessage("Error al cargar semanas: " + error.message, "error");
+    const errorMessage = handleError(error, "loadWeeks");
+    showMessage("Error al cargar semanas: " + errorMessage, "error");
     console.error("Error en loadWeeks:", error);
   }
 }
