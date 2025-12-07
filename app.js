@@ -64,6 +64,12 @@ const cache = (function() {
     workExpenses: {},
     goals: null,
     monthlyData: {},
+    assets: null,
+    liabilities: null,
+    investments: null,
+    budgets: null,
+    allIncomes: null,
+    allExpenses: null,
   };
   const timestamps = {};
 
@@ -368,12 +374,21 @@ async function initApp() {
 
 function setDefaultDates() {
   const today = new Date().toISOString().split("T")[0];
+  const currentMonth = new Date().toISOString().slice(0, 7);
   document.getElementById("incomeDate").value = today;
   document.getElementById("programmedDate").value = today;
   document.getElementById("unprogrammedDate").value = today;
   document.getElementById("workDate").value = today;
   document.getElementById("weekStartDate").value = today;
   document.getElementById("weekEndDate").value = today;
+  const budgetMonthInput = document.getElementById("budgetMonth");
+  if (budgetMonthInput) {
+    budgetMonthInput.value = currentMonth;
+  }
+  const investmentDateInput = document.getElementById("investmentDate");
+  if (investmentDateInput) {
+    investmentDateInput.value = today;
+  }
 }
 
 // ============= GESTIÓN DE SEMANAS =============
@@ -645,8 +660,42 @@ window.addIncome = async function () {
   }
 };
 
+// Función auxiliar para cargar todos los ingresos (sin filtrar por semana)
+async function loadAllIncomes() {
+  if (!currentUser) return [];
+  try {
+    const cached = cache.get("allIncomes");
+    if (cached) return cached;
+
+    const q = query(
+      collection(db, "incomes"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const incomes = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      incomes.push({
+        id: doc.id,
+        ...data,
+        date: data.date || (data.createdAt?.toDate ? data.createdAt.toDate().toISOString().split("T")[0] : null),
+      });
+    });
+    incomes.sort((a, b) => {
+      const dateA = new Date(a.date || a.createdAt?.toDate() || 0);
+      const dateB = new Date(b.date || b.createdAt?.toDate() || 0);
+      return dateB - dateA;
+    });
+    cache.set("allIncomes", incomes);
+    return incomes;
+  } catch (error) {
+    handleError(error, "loadAllIncomes");
+    return [];
+  }
+}
+
 async function loadIncomes() {
-  if (!currentWeek) return;
+  if (!currentWeek) return [];
 
   // Verificar caché
   const cached = cache.get("incomes", currentWeek.id);
@@ -940,8 +989,42 @@ window.cancelEditUnprogrammed = function () {
   document.getElementById("cancelEditUnprogrammed").style.display = "none";
 };
 
+// Función auxiliar para cargar todos los gastos (sin filtrar por semana)
+async function loadAllExpenses() {
+  if (!currentUser) return [];
+  try {
+    const cached = cache.get("allExpenses");
+    if (cached) return cached;
+
+    const q = query(
+      collection(db, "expenses"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const expenses = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      expenses.push({
+        id: doc.id,
+        ...data,
+        date: data.date || (data.createdAt?.toDate ? data.createdAt.toDate().toISOString().split("T")[0] : null),
+      });
+    });
+    expenses.sort((a, b) => {
+      const dateA = new Date(a.date || a.createdAt?.toDate() || 0);
+      const dateB = new Date(b.date || b.createdAt?.toDate() || 0);
+      return dateB - dateA;
+    });
+    cache.set("allExpenses", expenses);
+    return expenses;
+  } catch (error) {
+    handleError(error, "loadAllExpenses");
+    return [];
+  }
+}
+
 async function loadExpenses() {
-  if (!currentWeek) return;
+  if (!currentWeek) return [];
 
   // Verificar caché
   const cached = cache.get("expenses", currentWeek.id);
@@ -2426,7 +2509,7 @@ window.deleteGoal = async function (id) {
 };
 
 // ============= NAVEGACIÓN (BUG FIXED) =============
-window.showTab = function (tabName, element = null) {
+window.showTab = async function (tabName, element = null) {
   // Ocultar todas las secciones
   document.querySelectorAll(".section").forEach((section) => {
     section.classList.remove("active");
@@ -2453,6 +2536,19 @@ window.showTab = function (tabName, element = null) {
         tab.classList.add("active");
       }
     });
+  }
+
+  // Cargar datos de las nuevas secciones cuando se seleccionen
+  if (tabName === "networth") {
+    await loadNetworth();
+  } else if (tabName === "debts") {
+    await displayDebts();
+  } else if (tabName === "investments") {
+    await displayInvestments();
+  } else if (tabName === "budgets") {
+    await displayBudgets();
+  } else if (tabName === "trends") {
+    await loadTrends();
   }
 };
 
@@ -2851,4 +2947,1245 @@ window.runTests = function () {
 
 // Ejecutar tests en desarrollo (comentar en producción)
 // window.runTests();
+
+// ============= PATRIMONIO NETO (ACTIVOS Y PASIVOS) =============
+
+// Cargar activos
+async function loadAssets() {
+  if (!currentUser) return [];
+  try {
+    const cached = cache.get("assets");
+    if (cached) return cached;
+
+    const q = query(
+      collection(db, "assets"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const assets = [];
+    snapshot.forEach((doc) => {
+      assets.push({ id: doc.id, ...doc.data() });
+    });
+    assets.sort((a, b) => new Date(b.createdAt?.toDate() || 0) - new Date(a.createdAt?.toDate() || 0));
+    cache.set("assets", assets);
+    return assets;
+  } catch (error) {
+    handleError(error, "loadAssets");
+    return [];
+  }
+}
+
+// Agregar activo
+window.addAsset = async function () {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  const type = document.getElementById("assetType").value;
+  const name = document.getElementById("assetName").value;
+  const value = parseFloat(document.getElementById("assetValue").value);
+
+  if (!name || !value || value <= 0) {
+    showMessage("Por favor completa todos los campos correctamente", "error");
+    return;
+  }
+
+  try {
+    showLoading("Agregando activo...");
+    const assetData = {
+      userId: currentUser.uid,
+      type,
+      name,
+      value,
+      createdAt: Timestamp.now(),
+    };
+    await addDoc(collection(db, "assets"), assetData);
+    cache.clear("assets");
+    document.getElementById("assetName").value = "";
+    document.getElementById("assetValue").value = "";
+    showMessage("✅ Activo agregado exitosamente", "success");
+    await loadNetworth();
+  } catch (error) {
+    handleError(error, "addAsset");
+  } finally {
+    hideLoading();
+  }
+};
+
+// Cargar pasivos
+async function loadLiabilities() {
+  if (!currentUser) return [];
+  try {
+    const cached = cache.get("liabilities");
+    if (cached) return cached;
+
+    const q = query(
+      collection(db, "liabilities"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const liabilities = [];
+    snapshot.forEach((doc) => {
+      liabilities.push({ id: doc.id, ...doc.data() });
+    });
+    liabilities.sort((a, b) => new Date(b.createdAt?.toDate() || 0) - new Date(a.createdAt?.toDate() || 0));
+    cache.set("liabilities", liabilities);
+    return liabilities;
+  } catch (error) {
+    handleError(error, "loadLiabilities");
+    return [];
+  }
+}
+
+// Agregar pasivo
+window.addLiability = async function () {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  const type = document.getElementById("liabilityType").value;
+  const name = document.getElementById("liabilityName").value;
+  const amount = parseFloat(document.getElementById("liabilityAmount").value);
+  const interest = parseFloat(document.getElementById("liabilityInterest").value) || 0;
+  const minPayment = parseFloat(document.getElementById("liabilityMinPayment").value) || 0;
+
+  if (!name || !amount || amount <= 0) {
+    showMessage("Por favor completa todos los campos correctamente", "error");
+    return;
+  }
+
+  try {
+    showLoading("Agregando pasivo...");
+    const liabilityData = {
+      userId: currentUser.uid,
+      type,
+      name,
+      amount,
+      interest,
+      minPayment,
+      createdAt: Timestamp.now(),
+    };
+    await addDoc(collection(db, "liabilities"), liabilityData);
+    cache.clear("liabilities");
+    document.getElementById("liabilityName").value = "";
+    document.getElementById("liabilityAmount").value = "";
+    document.getElementById("liabilityInterest").value = "";
+    document.getElementById("liabilityMinPayment").value = "";
+    showMessage("✅ Pasivo agregado exitosamente", "success");
+    await loadNetworth();
+  } catch (error) {
+    handleError(error, "addLiability");
+  } finally {
+    hideLoading();
+  }
+};
+
+// Cargar y mostrar patrimonio neto
+async function loadNetworth() {
+  if (!currentUser) return;
+  try {
+    showLoading("Cargando patrimonio neto...");
+    const assets = await loadAssets();
+    const liabilities = await loadLiabilities();
+
+    const totalAssets = assets.reduce((sum, a) => sum + (a.value || 0), 0);
+    const totalLiabilities = liabilities.reduce((sum, l) => sum + (l.amount || 0), 0);
+    const networth = totalAssets - totalLiabilities;
+
+    // Mostrar cards
+    const cards = [
+      {
+        title: "💰 Total Activos",
+        value: `$${totalAssets.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#4ade80",
+        icon: "💵",
+      },
+      {
+        title: "💳 Total Pasivos",
+        value: `$${totalLiabilities.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#ef4444",
+        icon: "💳",
+      },
+      {
+        title: "📊 Patrimonio Neto",
+        value: `$${networth.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: networth >= 0 ? "#3b82f6" : "#ef4444",
+        icon: "💰",
+      },
+    ];
+
+    const cardsHTML = cards
+      .map(
+        (card) => `
+      <div class="card" style="border-left: 5px solid ${card.color}">
+        <div class="card-header">
+          <span style="font-size: 24px">${card.icon}</span>
+          <h3>${card.title}</h3>
+        </div>
+        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+      </div>
+    `
+      )
+      .join("");
+
+    document.getElementById("networthCards").innerHTML = cardsHTML;
+
+    // Mostrar lista de activos
+    const assetsHTML = assets
+      .map(
+        (asset) => `
+      <div class="card" style="margin-bottom: 10px; padding: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong>${asset.name}</strong> (${asset.type})
+            <br>
+            <small style="color: #666;">Valor: $${asset.value.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</small>
+          </div>
+          <button onclick="deleteAsset('${asset.id}')" style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">🗑️</button>
+        </div>
+      </div>
+    `
+      )
+      .join("");
+
+    document.getElementById("assetsList").innerHTML = assetsHTML || "<p>No hay activos registrados</p>";
+
+    // Mostrar lista de pasivos
+    const liabilitiesHTML = liabilities
+      .map(
+        (liability) => `
+      <div class="card" style="margin-bottom: 10px; padding: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong>${liability.name}</strong> (${liability.type})
+            <br>
+            <small style="color: #666;">
+              Monto: $${liability.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} | 
+              Interés: ${liability.interest}% | 
+              Pago Mínimo: $${liability.minPayment.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+            </small>
+          </div>
+          <button onclick="deleteLiability('${liability.id}')" style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">🗑️</button>
+        </div>
+      </div>
+    `
+      )
+      .join("");
+
+    document.getElementById("liabilitiesList").innerHTML = liabilitiesHTML || "<p>No hay pasivos registrados</p>";
+
+    // Gráfico de evolución (simplificado)
+    createNetworthChart(assets, liabilities);
+  } catch (error) {
+    handleError(error, "loadNetworth");
+  } finally {
+    hideLoading();
+  }
+}
+
+// Eliminar activo
+window.deleteAsset = async function (id) {
+  if (!confirm("¿Estás seguro de eliminar este activo?")) return;
+  try {
+    showLoading("Eliminando activo...");
+    await deleteDoc(doc(db, "assets", id));
+    cache.clear("assets");
+    showMessage("✅ Activo eliminado", "success");
+    await loadNetworth();
+  } catch (error) {
+    handleError(error, "deleteAsset");
+  } finally {
+    hideLoading();
+  }
+};
+
+// Eliminar pasivo
+window.deleteLiability = async function (id) {
+  if (!confirm("¿Estás seguro de eliminar este pasivo?")) return;
+  try {
+    showLoading("Eliminando pasivo...");
+    await deleteDoc(doc(db, "liabilities", id));
+    cache.clear("liabilities");
+    showMessage("✅ Pasivo eliminado", "success");
+    await loadNetworth();
+  } catch (error) {
+    handleError(error, "deleteLiability");
+  } finally {
+    hideLoading();
+  }
+};
+
+// Gráfico de patrimonio neto
+function createNetworthChart(assets, liabilities) {
+  const ctx = document.getElementById("networthChart");
+  if (!ctx) return;
+
+  const totalAssets = assets.reduce((sum, a) => sum + (a.value || 0), 0);
+  const totalLiabilities = liabilities.reduce((sum, l) => sum + (l.amount || 0), 0);
+  const networth = totalAssets - totalLiabilities;
+
+  new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: ["Activos", "Pasivos"],
+      datasets: [
+        {
+          data: [totalAssets, totalLiabilities],
+          backgroundColor: ["#4ade80", "#ef4444"],
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "bottom" },
+        title: { display: true, text: `Patrimonio Neto: $${networth.toLocaleString("es-ES", { minimumFractionDigits: 2 })}` },
+      },
+    },
+  });
+}
+
+// ============= LIBERTAD FINANCIERA =============
+
+window.calculateFreedom = function () {
+  const monthlyExpenses = parseFloat(document.getElementById("monthlyExpenses").value);
+  const currentAge = parseInt(document.getElementById("currentAge").value);
+  const targetAge = parseInt(document.getElementById("targetAge").value);
+
+  if (!monthlyExpenses || !currentAge || !targetAge || targetAge <= currentAge) {
+    showMessage("Por favor completa todos los campos correctamente", "error");
+    return;
+  }
+
+  const annualExpenses = monthlyExpenses * 12;
+  const targetAmount = annualExpenses * 25; // Regla del 4%
+  const yearsToSave = targetAge - currentAge;
+  const monthsToSave = yearsToSave * 12;
+
+  // Calcular ahorro mensual necesario (asumiendo 7% retorno anual)
+  const monthlyReturn = 0.07 / 12;
+  let monthlySavings = 0;
+  if (yearsToSave > 0) {
+    monthlySavings = (targetAmount * monthlyReturn) / (Math.pow(1 + monthlyReturn, monthsToSave) - 1);
+  }
+
+  const resultsHTML = `
+    <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 15px; margin-top: 20px;">
+      <h3 style="color: white; margin-bottom: 20px;">🚀 Resultados de Libertad Financiera</h3>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+        <div>
+          <div style="font-size: 14px; opacity: 0.9;">Gastos Anuales Necesarios</div>
+          <div style="font-size: 28px; font-weight: bold;">$${annualExpenses.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</div>
+        </div>
+        <div>
+          <div style="font-size: 14px; opacity: 0.9;">Monto Objetivo (25x gastos)</div>
+          <div style="font-size: 28px; font-weight: bold;">$${targetAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</div>
+        </div>
+        <div>
+          <div style="font-size: 14px; opacity: 0.9;">Años para Alcanzar</div>
+          <div style="font-size: 28px; font-weight: bold;">${yearsToSave} años</div>
+        </div>
+        <div>
+          <div style="font-size: 14px; opacity: 0.9;">Ahorro Mensual Necesario</div>
+          <div style="font-size: 28px; font-weight: bold;">$${monthlySavings.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</div>
+        </div>
+      </div>
+      <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.2); border-radius: 10px;">
+        <strong>💡 Nota:</strong> Este cálculo asume un retorno anual del 7% en tus inversiones (ajustado por inflación).
+        La regla del 4% significa que puedes retirar el 4% de tu patrimonio anualmente sin agotarlo.
+      </div>
+    </div>
+  `;
+
+  document.getElementById("freedomResults").innerHTML = resultsHTML;
+
+  // Actualizar cards
+  const cards = [
+    {
+      title: "💰 Monto Objetivo",
+      value: `$${targetAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+      color: "#667eea",
+      icon: "🎯",
+    },
+    {
+      title: "📅 Años Restantes",
+      value: `${yearsToSave} años`,
+      color: "#764ba2",
+      icon: "⏰",
+    },
+    {
+      title: "💵 Ahorro Mensual Necesario",
+      value: `$${monthlySavings.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+      color: "#4ade80",
+      icon: "💰",
+    },
+  ];
+
+  const cardsHTML = cards
+    .map(
+      (card) => `
+    <div class="card" style="border-left: 5px solid ${card.color}">
+      <div class="card-header">
+        <span style="font-size: 24px">${card.icon}</span>
+        <h3>${card.title}</h3>
+      </div>
+      <div class="card-value" style="color: ${card.color}">${card.value}</div>
+    </div>
+  `
+    )
+    .join("");
+
+  document.getElementById("freedomCards").innerHTML = cardsHTML;
+};
+
+window.simulateFreedom = function () {
+  const monthlyExpenses = parseFloat(document.getElementById("monthlyExpenses").value);
+  const extraSavings = parseFloat(document.getElementById("extraSavings").value) || 0;
+
+  if (!monthlyExpenses) {
+    showMessage("Primero calcula tu libertad financiera", "error");
+    return;
+  }
+
+  const annualExpenses = monthlyExpenses * 12;
+  const targetAmount = annualExpenses * 25;
+  const monthlyReturn = 0.07 / 12;
+
+  // Calcular con ahorro actual
+  const currentMonthly = parseFloat(document.getElementById("freedomResults")?.textContent.match(/\$[\d,]+\.\d{2}/)?.[0]?.replace(/[$,]/g, "") || 0);
+  const newMonthlySavings = currentMonthly + extraSavings;
+
+  // Calcular años necesarios con nuevo ahorro
+  let months = 0;
+  let balance = 0;
+  while (balance < targetAmount && months < 600) {
+    balance = balance * (1 + monthlyReturn) + newMonthlySavings;
+    months++;
+  }
+
+  const newYears = Math.ceil(months / 12);
+  const yearsSaved = parseFloat(document.getElementById("currentAge").value) + Math.ceil(months / 12) - parseFloat(document.getElementById("targetAge").value);
+
+  const simHTML = `
+    <div class="card" style="background: #f0f9ff; padding: 20px; border-radius: 10px; margin-top: 15px;">
+      <h4>📊 Resultados de la Simulación</h4>
+      <p><strong>Ahorro mensual adicional:</strong> $${extraSavings.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+      <p><strong>Nuevo ahorro mensual total:</strong> $${newMonthlySavings.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+      <p><strong>Tiempo para alcanzar libertad financiera:</strong> ${newYears} años</p>
+      ${yearsSaved > 0 ? `<p style="color: #4ade80;"><strong>✨ Ahorras ${yearsSaved} años!</strong></p>` : ""}
+    </div>
+  `;
+
+  document.getElementById("simulationResults").innerHTML = simHTML;
+};
+
+// ============= GESTIÓN DE DEUDAS =============
+
+async function loadDebts() {
+  if (!currentUser) return [];
+  const liabilities = await loadLiabilities();
+  return liabilities.filter((l) => l.amount > 0);
+}
+
+async function displayDebts() {
+  if (!currentUser) return;
+  try {
+    showLoading("Cargando deudas...");
+    const debts = await loadDebts();
+
+    const totalDebt = debts.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const totalMinPayments = debts.reduce((sum, d) => sum + (d.minPayment || 0), 0);
+    const avgInterest = debts.length > 0 ? debts.reduce((sum, d) => sum + (d.interest || 0), 0) / debts.length : 0;
+
+    const cards = [
+      {
+        title: "💳 Deuda Total",
+        value: `$${totalDebt.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#ef4444",
+        icon: "💳",
+      },
+      {
+        title: "💰 Pago Mínimo Mensual",
+        value: `$${totalMinPayments.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#f59e0b",
+        icon: "💵",
+      },
+      {
+        title: "📊 Interés Promedio",
+        value: `${avgInterest.toFixed(2)}%`,
+        color: "#8b5cf6",
+        icon: "📈",
+      },
+    ];
+
+    const cardsHTML = cards
+      .map(
+        (card) => `
+      <div class="card" style="border-left: 5px solid ${card.color}">
+        <div class="card-header">
+          <span style="font-size: 24px">${card.icon}</span>
+          <h3>${card.title}</h3>
+        </div>
+        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+      </div>
+    `
+      )
+      .join("");
+
+    document.getElementById("debtsCards").innerHTML = cardsHTML;
+
+    const debtsHTML = debts
+      .map(
+        (debt) => `
+      <div class="card" style="margin-bottom: 15px; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+          <div style="flex: 1;">
+            <h4>${debt.name}</h4>
+            <p style="color: #666; margin: 5px 0;"><strong>Tipo:</strong> ${debt.type}</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Monto:</strong> $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Interés:</strong> ${debt.interest}% anual</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Pago Mínimo:</strong> $${debt.minPayment.toLocaleString("es-ES", { minimumFractionDigits: 2 })}/mes</p>
+          </div>
+        </div>
+      </div>
+    `
+      )
+      .join("");
+
+    document.getElementById("debtsList").innerHTML = debtsHTML || "<p>No hay deudas registradas</p>";
+
+    updateDebtStrategy();
+  } catch (error) {
+    handleError(error, "displayDebts");
+  } finally {
+    hideLoading();
+  }
+}
+
+window.updateDebtStrategy = function () {
+  const strategy = document.getElementById("debtStrategy").value;
+  loadDebts().then((debts) => {
+    if (debts.length === 0) {
+      document.getElementById("debtPlan").innerHTML = "<p>No hay deudas para planificar</p>";
+      return;
+    }
+
+    let sortedDebts = [];
+    if (strategy === "snowball") {
+      sortedDebts = [...debts].sort((a, b) => a.amount - b.amount);
+    } else {
+      sortedDebts = [...debts].sort((a, b) => (b.interest || 0) - (a.interest || 0));
+    }
+
+    const planHTML = `
+      <div class="card" style="background: #f0f9ff; padding: 20px; border-radius: 10px; margin-top: 15px;">
+        <h4>📋 Plan de Pago (${strategy === "snowball" ? "Bola de Nieve" : "Avalancha"})</h4>
+        <ol style="margin-top: 15px;">
+          ${sortedDebts
+            .map(
+              (debt, index) => `
+            <li style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 5px;">
+              <strong>${debt.name}</strong> - 
+              Monto: $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} | 
+              Interés: ${debt.interest}% | 
+              Pago Mínimo: $${debt.minPayment.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+            </li>
+          `
+            )
+            .join("")}
+        </ol>
+        <p style="margin-top: 15px; color: #666;">
+          <strong>Estrategia:</strong> ${strategy === "snowball" ? "Paga primero la deuda más pequeña para ganar momentum psicológico" : "Paga primero la deuda con mayor interés para ahorrar más dinero"}
+        </p>
+      </div>
+    `;
+
+    document.getElementById("debtPlan").innerHTML = planHTML;
+  });
+};
+
+// ============= INVERSIONES =============
+
+async function loadInvestments() {
+  if (!currentUser) return [];
+  try {
+    const cached = cache.get("investments");
+    if (cached) return cached;
+
+    const q = query(
+      collection(db, "investments"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const investments = [];
+    snapshot.forEach((doc) => {
+      investments.push({ id: doc.id, ...doc.data() });
+    });
+    investments.sort((a, b) => new Date(b.date?.toDate() || 0) - new Date(a.date?.toDate() || 0));
+    cache.set("investments", investments);
+    return investments;
+  } catch (error) {
+    handleError(error, "loadInvestments");
+    return [];
+  }
+}
+
+window.addInvestment = async function () {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  const type = document.getElementById("investmentType").value;
+  const name = document.getElementById("investmentName").value;
+  const amount = parseFloat(document.getElementById("investmentAmount").value);
+  const currentValue = parseFloat(document.getElementById("investmentCurrentValue").value);
+  const date = document.getElementById("investmentDate").value;
+
+  if (!name || !amount || amount <= 0 || !date) {
+    showMessage("Por favor completa todos los campos correctamente", "error");
+    return;
+  }
+
+  try {
+    showLoading("Agregando inversión...");
+    const investmentData = {
+      userId: currentUser.uid,
+      type,
+      name,
+      amount,
+      currentValue: currentValue || amount,
+      date: Timestamp.fromDate(new Date(date)),
+      createdAt: Timestamp.now(),
+    };
+    await addDoc(collection(db, "investments"), investmentData);
+    cache.clear("investments");
+    document.getElementById("investmentName").value = "";
+    document.getElementById("investmentAmount").value = "";
+    document.getElementById("investmentCurrentValue").value = "";
+    document.getElementById("investmentDate").value = "";
+    showMessage("✅ Inversión agregada exitosamente", "success");
+    await displayInvestments();
+  } catch (error) {
+    handleError(error, "addInvestment");
+  } finally {
+    hideLoading();
+  }
+};
+
+async function displayInvestments() {
+  if (!currentUser) return;
+  try {
+    showLoading("Cargando inversiones...");
+    const investments = await loadInvestments();
+
+    const totalInvested = investments.reduce((sum, i) => sum + (i.amount || 0), 0);
+    const totalValue = investments.reduce((sum, i) => sum + (i.currentValue || i.amount || 0), 0);
+    const totalReturn = totalValue - totalInvested;
+    const returnPercent = totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
+
+    const cards = [
+      {
+        title: "💰 Total Invertido",
+        value: `$${totalInvested.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#3b82f6",
+        icon: "💵",
+      },
+      {
+        title: "📈 Valor Actual",
+        value: `$${totalValue.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#4ade80",
+        icon: "📊",
+      },
+      {
+        title: "📊 Ganancia/Pérdida",
+        value: `$${totalReturn.toLocaleString("es-ES", { minimumFractionDigits: 2 })} (${returnPercent >= 0 ? "+" : ""}${returnPercent.toFixed(2)}%)`,
+        color: returnPercent >= 0 ? "#4ade80" : "#ef4444",
+        icon: returnPercent >= 0 ? "📈" : "📉",
+      },
+    ];
+
+    const cardsHTML = cards
+      .map(
+        (card) => `
+      <div class="card" style="border-left: 5px solid ${card.color}">
+        <div class="card-header">
+          <span style="font-size: 24px">${card.icon}</span>
+          <h3>${card.title}</h3>
+        </div>
+        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+      </div>
+    `
+      )
+      .join("");
+
+    document.getElementById("investmentsCards").innerHTML = cardsHTML;
+
+    const investmentsHTML = investments
+      .map((investment) => {
+        const returnAmount = (investment.currentValue || investment.amount) - investment.amount;
+        const returnPct = investment.amount > 0 ? (returnAmount / investment.amount) * 100 : 0;
+        return `
+      <div class="card" style="margin-bottom: 15px; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+          <div style="flex: 1;">
+            <h4>${investment.name} (${investment.type})</h4>
+            <p style="color: #666; margin: 5px 0;"><strong>Invertido:</strong> $${investment.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Valor Actual:</strong> $${(investment.currentValue || investment.amount).toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+            <p style="color: ${returnPct >= 0 ? "#4ade80" : "#ef4444"}; margin: 5px 0;">
+              <strong>Rendimiento:</strong> $${returnAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} (${returnPct >= 0 ? "+" : ""}${returnPct.toFixed(2)}%)
+            </p>
+          </div>
+          <button onclick="deleteInvestment('${investment.id}')" style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">🗑️</button>
+        </div>
+      </div>
+    `;
+      })
+      .join("");
+
+    document.getElementById("investmentsList").innerHTML = investmentsHTML || "<p>No hay inversiones registradas</p>";
+
+    createInvestmentsChart(investments);
+  } catch (error) {
+    handleError(error, "displayInvestments");
+  } finally {
+    hideLoading();
+  }
+}
+
+window.deleteInvestment = async function (id) {
+  if (!confirm("¿Estás seguro de eliminar esta inversión?")) return;
+  try {
+    showLoading("Eliminando inversión...");
+    await deleteDoc(doc(db, "investments", id));
+    cache.clear("investments");
+    showMessage("✅ Inversión eliminada", "success");
+    await displayInvestments();
+  } catch (error) {
+    handleError(error, "deleteInvestment");
+  } finally {
+    hideLoading();
+  }
+};
+
+function createInvestmentsChart(investments) {
+  const ctx = document.getElementById("investmentsChart");
+  if (!ctx) return;
+
+  const types = {};
+  investments.forEach((inv) => {
+    types[inv.type] = (types[inv.type] || 0) + (inv.currentValue || inv.amount);
+  });
+
+  new Chart(ctx, {
+    type: "pie",
+    data: {
+      labels: Object.keys(types),
+      datasets: [
+        {
+          data: Object.values(types),
+          backgroundColor: ["#3b82f6", "#4ade80", "#f59e0b", "#ef4444", "#8b5cf6"],
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "bottom" },
+        title: { display: true, text: "Distribución de Inversiones por Tipo" },
+      },
+    },
+  });
+}
+
+// ============= PRESUPUESTOS POR CATEGORÍA =============
+
+async function loadBudgets() {
+  if (!currentUser) return [];
+  try {
+    const cached = cache.get("budgets");
+    if (cached) return cached;
+
+    const q = query(
+      collection(db, "budgets"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const budgets = [];
+    snapshot.forEach((doc) => {
+      budgets.push({ id: doc.id, ...doc.data() });
+    });
+    budgets.sort((a, b) => {
+      if (a.month && b.month) {
+        return b.month.localeCompare(a.month);
+      }
+      return 0;
+    });
+    cache.set("budgets", budgets);
+    return budgets;
+  } catch (error) {
+    handleError(error, "loadBudgets");
+    return [];
+  }
+}
+
+window.createBudget = async function () {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  const category = document.getElementById("budgetCategory").value;
+  const limit = parseFloat(document.getElementById("budgetLimit").value);
+  const month = document.getElementById("budgetMonth").value;
+
+  if (!category || !limit || limit <= 0 || !month) {
+    showMessage("Por favor completa todos los campos correctamente", "error");
+    return;
+  }
+
+  try {
+    showLoading("Creando presupuesto...");
+    const budgetData = {
+      userId: currentUser.uid,
+      category,
+      limit,
+      month,
+      createdAt: Timestamp.now(),
+    };
+    await addDoc(collection(db, "budgets"), budgetData);
+    cache.clear("budgets");
+    document.getElementById("budgetLimit").value = "";
+    showMessage("✅ Presupuesto creado exitosamente", "success");
+    await displayBudgets();
+  } catch (error) {
+    handleError(error, "createBudget");
+  } finally {
+    hideLoading();
+  }
+};
+
+async function displayBudgets() {
+  if (!currentUser) return;
+  try {
+    showLoading("Cargando presupuestos...");
+    const budgets = await loadBudgets();
+    const currentMonth = new Date().toISOString().slice(0, 7);
+
+    // Cargar gastos del mes actual
+    const allExpenses = await loadAllExpenses();
+    const currentMonthExpenses = allExpenses.filter((e) => {
+      const expenseDate = e.date || e.createdAt?.toDate();
+      if (!expenseDate) return false;
+      const expenseMonth = new Date(expenseDate).toISOString().slice(0, 7);
+      return expenseMonth === currentMonth;
+    });
+
+    // Calcular gastos por categoría
+    const expensesByCategory = {};
+    currentMonthExpenses.forEach((expense) => {
+      const cat = expense.category || "Otros";
+      expensesByCategory[cat] = (expensesByCategory[cat] || 0) + (expense.amount || 0);
+    });
+
+    const totalBudget = budgets.reduce((sum, b) => sum + (b.limit || 0), 0);
+    const totalSpent = Object.values(expensesByCategory).reduce((sum, v) => sum + v, 0);
+
+    const cards = [
+      {
+        title: "📋 Presupuesto Total",
+        value: `$${totalBudget.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#3b82f6",
+        icon: "💰",
+      },
+      {
+        title: "💸 Gasto Real",
+        value: `$${totalSpent.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#ef4444",
+        icon: "💵",
+      },
+      {
+        title: "📊 Restante",
+        value: `$${(totalBudget - totalSpent).toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: totalBudget - totalSpent >= 0 ? "#4ade80" : "#ef4444",
+        icon: "📈",
+      },
+    ];
+
+    const cardsHTML = cards
+      .map(
+        (card) => `
+      <div class="card" style="border-left: 5px solid ${card.color}">
+        <div class="card-header">
+          <span style="font-size: 24px">${card.icon}</span>
+          <h3>${card.title}</h3>
+        </div>
+        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+      </div>
+    `
+      )
+      .join("");
+
+    document.getElementById("budgetsCards").innerHTML = cardsHTML;
+
+    const budgetsHTML = budgets
+      .map((budget) => {
+        const spent = expensesByCategory[budget.category] || 0;
+        const remaining = budget.limit - spent;
+        const percent = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
+        return `
+      <div class="card" style="margin-bottom: 15px; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+          <div style="flex: 1;">
+            <h4>${budget.category} - ${budget.month}</h4>
+            <p style="color: #666; margin: 5px 0;"><strong>Límite:</strong> $${budget.limit.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Gastado:</strong> $${spent.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+            <p style="color: ${remaining >= 0 ? "#4ade80" : "#ef4444"}; margin: 5px 0;">
+              <strong>Restante:</strong> $${remaining.toLocaleString("es-ES", { minimumFractionDigits: 2 })} (${percent.toFixed(1)}%)
+            </p>
+            <div style="margin-top: 10px; background: #e5e7eb; height: 10px; border-radius: 5px; overflow: hidden;">
+              <div style="background: ${percent > 100 ? "#ef4444" : percent > 80 ? "#f59e0b" : "#4ade80"}; height: 100%; width: ${Math.min(percent, 100)}%; transition: width 0.3s;"></div>
+            </div>
+          </div>
+          <button onclick="deleteBudget('${budget.id}')" style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">🗑️</button>
+        </div>
+      </div>
+    `;
+      })
+      .join("");
+
+    document.getElementById("budgetsList").innerHTML = budgetsHTML || "<p>No hay presupuestos creados</p>";
+
+    createBudgetsChart(budgets, expensesByCategory);
+  } catch (error) {
+    handleError(error, "displayBudgets");
+  } finally {
+    hideLoading();
+  }
+}
+
+window.deleteBudget = async function (id) {
+  if (!confirm("¿Estás seguro de eliminar este presupuesto?")) return;
+  try {
+    showLoading("Eliminando presupuesto...");
+    await deleteDoc(doc(db, "budgets", id));
+    cache.clear("budgets");
+    showMessage("✅ Presupuesto eliminado", "success");
+    await displayBudgets();
+  } catch (error) {
+    handleError(error, "deleteBudget");
+  } finally {
+    hideLoading();
+  }
+};
+
+function createBudgetsChart(budgets, expensesByCategory) {
+  const ctx = document.getElementById("budgetsChart");
+  if (!ctx) return;
+
+  const categories = budgets.map((b) => b.category);
+  const limits = budgets.map((b) => b.limit);
+  const spent = categories.map((cat) => expensesByCategory[cat] || 0);
+
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: categories,
+      datasets: [
+        {
+          label: "Presupuesto",
+          data: limits,
+          backgroundColor: "#3b82f6",
+        },
+        {
+          label: "Gastado",
+          data: spent,
+          backgroundColor: "#ef4444",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "bottom" },
+        title: { display: true, text: "Presupuesto vs Gasto Real" },
+      },
+      scales: {
+        y: { beginAtZero: true },
+      },
+    },
+  });
+}
+
+// ============= TENDENCIAS Y ANÁLISIS =============
+
+async function loadTrends() {
+  if (!currentUser) return;
+  try {
+    showLoading("Analizando tendencias...");
+
+    // Cargar datos de los últimos 6 meses
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push(date.toISOString().slice(0, 7));
+    }
+
+    const allIncomes = await loadAllIncomes();
+    const allExpenses = await loadAllExpenses();
+
+    const monthlyData = months.map((month) => {
+      const monthIncomes = allIncomes.filter((inc) => {
+        const incDate = inc.date || inc.createdAt?.toDate();
+        if (!incDate) return false;
+        return new Date(incDate).toISOString().slice(0, 7) === month;
+      });
+      const monthExpenses = allExpenses.filter((exp) => {
+        const expDate = exp.date || exp.createdAt?.toDate();
+        if (!expDate) return false;
+        return new Date(expDate).toISOString().slice(0, 7) === month;
+      });
+
+      const totalIncome = monthIncomes.reduce((sum, i) => sum + (i.amount || 0), 0);
+      const totalExpense = monthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+      return {
+        month,
+        income: totalIncome,
+        expense: totalExpense,
+        balance: totalIncome - totalExpense,
+      };
+    });
+
+    // Cards
+    const avgIncome = monthlyData.reduce((sum, m) => sum + m.income, 0) / monthlyData.length;
+    const avgExpense = monthlyData.reduce((sum, m) => sum + m.expense, 0) / monthlyData.length;
+    const avgBalance = monthlyData.reduce((sum, m) => sum + m.balance, 0) / monthlyData.length;
+    const trend = monthlyData[monthlyData.length - 1].balance - monthlyData[0].balance;
+
+    const cards = [
+      {
+        title: "📊 Ingreso Promedio",
+        value: `$${avgIncome.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#4ade80",
+        icon: "💵",
+      },
+      {
+        title: "💸 Gasto Promedio",
+        value: `$${avgExpense.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#ef4444",
+        icon: "💳",
+      },
+      {
+        title: "💰 Balance Promedio",
+        value: `$${avgBalance.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: "#3b82f6",
+        icon: "📈",
+      },
+      {
+        title: "📉 Tendencia",
+        value: `${trend >= 0 ? "+" : ""}$${trend.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
+        color: trend >= 0 ? "#4ade80" : "#ef4444",
+        icon: trend >= 0 ? "📈" : "📉",
+      },
+    ];
+
+    const cardsHTML = cards
+      .map(
+        (card) => `
+      <div class="card" style="border-left: 5px solid ${card.color}">
+        <div class="card-header">
+          <span style="font-size: 24px">${card.icon}</span>
+          <h3>${card.title}</h3>
+        </div>
+        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+      </div>
+    `
+      )
+      .join("");
+
+    document.getElementById("trendsCards").innerHTML = cardsHTML;
+
+    // Gráfico de tendencias
+    createTrendsChart(monthlyData);
+
+    // Análisis por categoría
+    const categoryData = {};
+    allExpenses.forEach((exp) => {
+      const cat = exp.category || "Otros";
+      categoryData[cat] = (categoryData[cat] || 0) + (exp.amount || 0);
+    });
+
+    createCategoryTrendsChart(categoryData);
+
+    // Insights
+    generateInsights(monthlyData, categoryData, avgIncome, avgExpense);
+
+    // Comparativa mes a mes
+    displayMonthComparison(monthlyData);
+  } catch (error) {
+    handleError(error, "loadTrends");
+  } finally {
+    hideLoading();
+  }
+}
+
+function createTrendsChart(monthlyData) {
+  const ctx = document.getElementById("trendsChart");
+  if (!ctx) return;
+
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: monthlyData.map((m) => {
+        const [year, month] = m.month.split("-");
+        return `${month}/${year}`;
+      }),
+      datasets: [
+        {
+          label: "Ingresos",
+          data: monthlyData.map((m) => m.income),
+          borderColor: "#4ade80",
+          backgroundColor: "rgba(74, 222, 128, 0.1)",
+          tension: 0.4,
+        },
+        {
+          label: "Gastos",
+          data: monthlyData.map((m) => m.expense),
+          borderColor: "#ef4444",
+          backgroundColor: "rgba(239, 68, 68, 0.1)",
+          tension: 0.4,
+        },
+        {
+          label: "Balance",
+          data: monthlyData.map((m) => m.balance),
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.1)",
+          tension: 0.4,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "bottom" },
+        title: { display: true, text: "Tendencias de Ingresos y Gastos (Últimos 6 Meses)" },
+      },
+      scales: {
+        y: { beginAtZero: true },
+      },
+    },
+  });
+}
+
+function createCategoryTrendsChart(categoryData) {
+  const ctx = document.getElementById("categoryTrendsChart");
+  if (!ctx) return;
+
+  const categories = Object.keys(categoryData);
+  const amounts = Object.values(categoryData);
+
+  new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: categories,
+      datasets: [
+        {
+          data: amounts,
+          backgroundColor: [
+            "#3b82f6",
+            "#4ade80",
+            "#f59e0b",
+            "#ef4444",
+            "#8b5cf6",
+            "#ec4899",
+            "#06b6d4",
+          ],
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "bottom" },
+        title: { display: true, text: "Distribución de Gastos por Categoría" },
+      },
+    },
+  });
+}
+
+function generateInsights(monthlyData, categoryData, avgIncome, avgExpense) {
+  const insights = [];
+  const savingsRate = avgIncome > 0 ? ((avgIncome - avgExpense) / avgIncome) * 100 : 0;
+
+  if (savingsRate > 20) {
+    insights.push("✅ Excelente tasa de ahorro. Estás en el camino correcto hacia la libertad financiera.");
+  } else if (savingsRate > 10) {
+    insights.push("⚠️ Tu tasa de ahorro es buena, pero puedes mejorarla reduciendo gastos innecesarios.");
+  } else if (savingsRate > 0) {
+    insights.push("⚠️ Tu tasa de ahorro es baja. Considera revisar tus gastos y aumentar tus ingresos.");
+  } else {
+    insights.push("❌ Estás gastando más de lo que ganas. Es urgente revisar tus finanzas.");
+  }
+
+  const topCategory = Object.entries(categoryData).sort((a, b) => b[1] - a[1])[0];
+  if (topCategory) {
+    insights.push(`📊 Tu mayor categoría de gasto es "${topCategory[0]}" con $${topCategory[1].toLocaleString("es-ES", { minimumFractionDigits: 2 })}.`);
+  }
+
+  const trend = monthlyData[monthlyData.length - 1].balance - monthlyData[0].balance;
+  if (trend > 0) {
+    insights.push("📈 Tu balance está mejorando mes a mes. ¡Sigue así!");
+  } else {
+    insights.push("📉 Tu balance está empeorando. Revisa tus gastos y busca formas de aumentar tus ingresos.");
+  }
+
+  const expenseRatio = avgIncome > 0 ? (avgExpense / avgIncome) * 100 : 0;
+  if (expenseRatio > 90) {
+    insights.push("⚠️ Estás gastando más del 90% de tus ingresos. Esto es peligroso para tu salud financiera.");
+  }
+
+  document.getElementById("insights").innerHTML = `
+    <ul style="list-style: none; padding: 0;">
+      ${insights.map((insight) => `<li style="padding: 10px; margin-bottom: 10px; background: white; border-radius: 5px; border-left: 4px solid #3b82f6;">${insight}</li>`).join("")}
+    </ul>
+  `;
+}
+
+function displayMonthComparison(monthlyData) {
+  const comparisonHTML = `
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr style="background: #f3f4f6;">
+          <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e5e7eb;">Mes</th>
+          <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">Ingresos</th>
+          <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">Gastos</th>
+          <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${monthlyData
+          .map(
+            (m) => `
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px;">${new Date(m.month + "-01").toLocaleDateString("es-ES", { month: "long", year: "numeric" })}</td>
+            <td style="padding: 10px; text-align: right; color: #4ade80;">$${m.income.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</td>
+            <td style="padding: 10px; text-align: right; color: #ef4444;">$${m.expense.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</td>
+            <td style="padding: 10px; text-align: right; color: ${m.balance >= 0 ? "#4ade80" : "#ef4444"}; font-weight: bold;">
+              $${m.balance.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+            </td>
+          </tr>
+        `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById("monthComparison").innerHTML = comparisonHTML;
+}
+
 

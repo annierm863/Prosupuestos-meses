@@ -68,6 +68,12 @@
           📈 Resumen Mensual
         </button>
         <button class="tab" onclick="showTab('goals', this)">🎯 Metas</button>
+        <button class="tab" onclick="showTab('networth', this)">💰 Patrimonio</button>
+        <button class="tab" onclick="showTab('freedom', this)">🚀 Libertad Financiera</button>
+        <button class="tab" onclick="showTab('debts', this)">💳 Deudas</button>
+        <button class="tab" onclick="showTab('investments', this)">📊 Inversiones</button>
+        <button class="tab" onclick="showTab('budgets', this)">📋 Presupuestos</button>
+        <button class="tab" onclick="showTab('trends', this)">📉 Tendencias</button>
       </div>
 
       <div class="content">
@@ -459,6 +465,290 @@
 
           <h3>Mis Metas Activas</h3>
           <div id="goalsList"></div>
+        </div>
+
+        <!-- Patrimonio Neto -->
+        <div id="networth" class="section">
+          <h2>💰 Patrimonio Neto</h2>
+          <div class="alert alert-info">
+            <strong>Patrimonio Neto = Activos - Pasivos</strong><br>
+            Tu patrimonio neto es la medida real de tu riqueza y progreso hacia la libertad financiera.
+          </div>
+
+          <div class="dashboard-grid" id="networthCards"></div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+            <!-- Activos -->
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px;">
+              <h3 style="color: #4ade80; margin-bottom: 15px;">💵 Activos</h3>
+              <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                <h4>Agregar Activo</h4>
+                <div class="form-group">
+                  <label>Tipo:</label>
+                  <select id="assetType">
+                    <option value="Efectivo">💵 Efectivo</option>
+                    <option value="Cuenta Bancaria">🏦 Cuenta Bancaria</option>
+                    <option value="Inversión">📈 Inversión</option>
+                    <option value="Propiedad">🏠 Propiedad</option>
+                    <option value="Vehículo">🚗 Vehículo</option>
+                    <option value="Otro">📦 Otro</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Nombre/Descripción:</label>
+                  <input type="text" id="assetName" placeholder="Ej: Cuenta de Ahorros" />
+                </div>
+                <div class="form-group">
+                  <label>Valor Actual:</label>
+                  <input type="number" id="assetValue" placeholder="0.00" step="0.01" />
+                </div>
+                <button onclick="addAsset()">➕ Agregar Activo</button>
+              </div>
+              <div id="assetsList"></div>
+            </div>
+
+            <!-- Pasivos -->
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 15px;">
+              <h3 style="color: #ef4444; margin-bottom: 15px;">💳 Pasivos (Deudas)</h3>
+              <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                <h4>Agregar Pasivo</h4>
+                <div class="form-group">
+                  <label>Tipo:</label>
+                  <select id="liabilityType">
+                    <option value="Tarjeta de Crédito">💳 Tarjeta de Crédito</option>
+                    <option value="Préstamo Personal">📋 Préstamo Personal</option>
+                    <option value="Hipoteca">🏠 Hipoteca</option>
+                    <option value="Préstamo de Auto">🚗 Préstamo de Auto</option>
+                    <option value="Otro">📦 Otro</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Nombre:</label>
+                  <input type="text" id="liabilityName" placeholder="Ej: Tarjeta Visa" />
+                </div>
+                <div class="form-group">
+                  <label>Monto Total:</label>
+                  <input type="number" id="liabilityAmount" placeholder="0.00" step="0.01" />
+                </div>
+                <div class="form-group">
+                  <label>Tasa de Interés (% anual):</label>
+                  <input type="number" id="liabilityInterest" placeholder="0.00" step="0.01" />
+                </div>
+                <div class="form-group">
+                  <label>Pago Mínimo Mensual:</label>
+                  <input type="number" id="liabilityMinPayment" placeholder="0.00" step="0.01" />
+                </div>
+                <button onclick="addLiability()">➕ Agregar Pasivo</button>
+              </div>
+              <div id="liabilitiesList"></div>
+            </div>
+          </div>
+
+          <!-- Gráfico de Evolución -->
+          <div style="margin-top: 30px;">
+            <h3>📈 Evolución del Patrimonio Neto</h3>
+            <div class="chart-container">
+              <canvas id="networthChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Libertad Financiera -->
+        <div id="freedom" class="section">
+          <h2>🚀 Calculadora de Libertad Financiera</h2>
+          <div class="alert alert-info">
+            La libertad financiera se alcanza cuando tus ingresos pasivos cubren todos tus gastos. 
+            Usamos la <strong>Regla del 4%</strong>: necesitas 25 veces tus gastos anuales.
+          </div>
+
+          <div class="dashboard-grid" id="freedomCards"></div>
+
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-top: 20px;">
+            <h3>📊 Calculadora</h3>
+            <div class="form-group">
+              <label>Gastos Mensuales Necesarios (para mantener tu estilo de vida):</label>
+              <input type="number" id="monthlyExpenses" placeholder="0.00" step="0.01" />
+              <small style="color: #666;">Ingresa cuánto necesitas mensualmente para vivir</small>
+            </div>
+            <div class="form-group">
+              <label>Edad Actual:</label>
+              <input type="number" id="currentAge" placeholder="30" />
+            </div>
+            <div class="form-group">
+              <label>Edad Deseada para Libertad Financiera:</label>
+              <input type="number" id="targetAge" placeholder="50" />
+            </div>
+            <button onclick="calculateFreedom()">🧮 Calcular Libertad Financiera</button>
+          </div>
+
+          <div id="freedomResults" style="margin-top: 20px;"></div>
+
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-top: 20px;">
+            <h3>🎯 Simulador</h3>
+            <p>¿Qué pasaría si aumentas tu ahorro mensual?</p>
+            <div class="form-group">
+              <label>Ahorro Mensual Adicional:</label>
+              <input type="number" id="extraSavings" placeholder="0.00" step="0.01" />
+            </div>
+            <button onclick="simulateFreedom()">📊 Simular</button>
+            <div id="simulationResults" style="margin-top: 15px;"></div>
+          </div>
+        </div>
+
+        <!-- Deudas -->
+        <div id="debts" class="section">
+          <h2>💳 Gestión de Deudas</h2>
+          <div class="alert alert-warning">
+            Las deudas impiden tu libertad financiera. Usa estrategias como la <strong>Bola de Nieve</strong> 
+            (pagar la más pequeña primero) o <strong>Avalancha</strong> (pagar la de mayor interés primero).
+          </div>
+
+          <div class="dashboard-grid" id="debtsCards"></div>
+
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-top: 20px;">
+            <h3>Estrategia de Pago</h3>
+            <div class="form-group">
+              <label>Seleccionar Estrategia:</label>
+              <select id="debtStrategy" onchange="updateDebtStrategy()">
+                <option value="snowball">❄️ Bola de Nieve (Menor monto primero)</option>
+                <option value="avalanche">🏔️ Avalancha (Mayor interés primero)</option>
+              </select>
+            </div>
+            <div id="debtPlan"></div>
+          </div>
+
+          <h3 style="margin-top: 20px;">Mis Deudas</h3>
+          <div id="debtsList"></div>
+        </div>
+
+        <!-- Inversiones -->
+        <div id="investments" class="section">
+          <h2>📊 Seguimiento de Inversiones</h2>
+          <div class="alert alert-info">
+            Las inversiones son clave para la libertad financiera. Haz que tu dinero trabaje para ti.
+          </div>
+
+          <div class="dashboard-grid" id="investmentsCards"></div>
+
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-top: 20px;">
+            <h3>Agregar Inversión</h3>
+            <div class="form-group">
+              <label>Tipo:</label>
+              <select id="investmentType">
+                <option value="Acciones">📈 Acciones</option>
+                <option value="Fondos">💰 Fondos Mutuos</option>
+                <option value="Cripto">₿ Criptomonedas</option>
+                <option value="Bienes Raíces">🏠 Bienes Raíces</option>
+                <option value="Otro">📦 Otro</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Nombre:</label>
+              <input type="text" id="investmentName" placeholder="Ej: AAPL, Bitcoin, etc." />
+            </div>
+            <div class="form-group">
+              <label>Monto Invertido:</label>
+              <input type="number" id="investmentAmount" placeholder="0.00" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label>Valor Actual:</label>
+              <input type="number" id="investmentCurrentValue" placeholder="0.00" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label>Fecha de Inversión:</label>
+              <input type="date" id="investmentDate" />
+            </div>
+            <button onclick="addInvestment()">➕ Agregar Inversión</button>
+          </div>
+
+          <h3 style="margin-top: 20px;">Mis Inversiones</h3>
+          <div id="investmentsList"></div>
+
+          <div style="margin-top: 30px;">
+            <h3>📈 Rendimiento de Inversiones</h3>
+            <div class="chart-container">
+              <canvas id="investmentsChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Presupuestos por Categoría -->
+        <div id="budgets" class="section">
+          <h2>📋 Presupuestos por Categoría</h2>
+          <div class="alert alert-info">
+            Establece límites mensuales por categoría para tener control total de tus gastos.
+          </div>
+
+          <div class="dashboard-grid" id="budgetsCards"></div>
+
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-top: 20px;">
+            <h3>Crear Presupuesto Mensual</h3>
+            <div class="form-group">
+              <label>Categoría:</label>
+              <select id="budgetCategory">
+                <option value="Comida">🍔 Comida</option>
+                <option value="Transporte">🚗 Transporte</option>
+                <option value="Salud">🏥 Salud</option>
+                <option value="Servicios">💡 Servicios</option>
+                <option value="Entretenimiento">🎮 Entretenimiento</option>
+                <option value="Educación">📚 Educación</option>
+                <option value="Otros">📦 Otros</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Límite Mensual:</label>
+              <input type="number" id="budgetLimit" placeholder="0.00" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label>Mes:</label>
+              <input type="month" id="budgetMonth" />
+            </div>
+            <button onclick="createBudget()">➕ Crear Presupuesto</button>
+          </div>
+
+          <h3 style="margin-top: 20px;">Presupuestos Activos</h3>
+          <div id="budgetsList"></div>
+
+          <div style="margin-top: 30px;">
+            <h3>📊 Presupuesto vs Gasto Real</h3>
+            <div class="chart-container">
+              <canvas id="budgetsChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tendencias y Análisis -->
+        <div id="trends" class="section">
+          <h2>📉 Análisis de Tendencias</h2>
+          <div class="alert alert-info">
+            Analiza tus patrones de gasto, tendencias y proyecciones para tomar mejores decisiones financieras.
+          </div>
+
+          <div class="dashboard-grid" id="trendsCards"></div>
+
+          <div style="margin-top: 20px;">
+            <h3>📈 Tendencias de Ingresos y Gastos (Últimos 6 Meses)</h3>
+            <div class="chart-container">
+              <canvas id="trendsChart"></canvas>
+            </div>
+          </div>
+
+          <div style="margin-top: 30px;">
+            <h3>📊 Análisis por Categoría</h3>
+            <div class="chart-container">
+              <canvas id="categoryTrendsChart"></canvas>
+            </div>
+          </div>
+
+          <div style="margin-top: 30px; background: #f8f9fa; padding: 20px; border-radius: 15px;">
+            <h3>🔍 Insights y Recomendaciones</h3>
+            <div id="insights"></div>
+          </div>
+
+          <div style="margin-top: 30px; background: #f8f9fa; padding: 20px; border-radius: 15px;">
+            <h3>📅 Comparativa Mes a Mes</h3>
+            <div id="monthComparison"></div>
+          </div>
         </div>
       </div>
     </div>
