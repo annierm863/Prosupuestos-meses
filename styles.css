@@ -376,6 +376,29 @@ body {
   font-weight: bold;
 }
 
+/* Corregir color de texto en cards con fondo claro */
+#trends .card,
+#budgets .card,
+#networth .card {
+  background: white !important;
+  color: #333 !important;
+}
+
+#trends .card h3,
+#budgets .card h3,
+#networth .card h3,
+#trends .card-header h3,
+#budgets .card-header h3,
+#networth .card-header h3 {
+  color: #333 !important;
+}
+
+#trends .card .card-value,
+#budgets .card .card-value,
+#networth .card .card-value {
+  color: inherit !important;
+}
+
 .card-subtitle {
   font-size: 12px;
   opacity: 0.8;

@@ -828,8 +828,46 @@
 
           <div class="dashboard-grid" id="debtsCards"></div>
 
+          <!-- Formulario para Agregar Deuda -->
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-top: 20px; margin-bottom: 20px;">
+            <h3>➕ Agregar Nueva Deuda</h3>
+            <p style="color: #666; margin-bottom: 15px; font-size: 14px;">
+              Registra todas tus deudas para llevar un control completo y crear un plan de pago efectivo.
+            </p>
+            <div class="form-group">
+              <label>Tipo de Deuda:</label>
+              <select id="debtType">
+                <option value="Tarjeta de Crédito">💳 Tarjeta de Crédito</option>
+                <option value="Préstamo Personal">📋 Préstamo Personal</option>
+                <option value="Hipoteca">🏠 Hipoteca</option>
+                <option value="Préstamo de Auto">🚗 Préstamo de Auto</option>
+                <option value="Préstamo Estudiantil">🎓 Préstamo Estudiantil</option>
+                <option value="Otro">📦 Otro</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Nombre/Descripción:</label>
+              <input type="text" id="debtName" placeholder="Ej: Tarjeta Visa, Préstamo Banco X" />
+            </div>
+            <div class="form-group">
+              <label>Monto Total de la Deuda:</label>
+              <input type="number" id="debtAmount" placeholder="0.00" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label>Tasa de Interés (% anual):</label>
+              <input type="number" id="debtInterest" placeholder="0.00" step="0.01" />
+              <small style="color: #666;">Ejemplo: 18.5 para 18.5% anual</small>
+            </div>
+            <div class="form-group">
+              <label>Pago Mínimo Mensual:</label>
+              <input type="number" id="debtMinPayment" placeholder="0.00" step="0.01" />
+            </div>
+            <button onclick="addDebt()">➕ Agregar Deuda</button>
+          </div>
+
+          <!-- Estrategia de Pago -->
           <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-top: 20px;">
-            <h3>Estrategia de Pago</h3>
+            <h3>📋 Estrategia de Pago Recomendada</h3>
             <div class="form-group">
               <label>Seleccionar Estrategia:</label>
               <select id="debtStrategy" onchange="updateDebtStrategy()">
@@ -840,8 +878,14 @@
             <div id="debtPlan"></div>
           </div>
 
-          <h3 style="margin-top: 20px;">Mis Deudas</h3>
-          <div id="debtsList"></div>
+          <!-- Lista de Deudas -->
+          <div style="margin-top: 30px;">
+            <h3>📊 Mis Deudas Registradas</h3>
+            <p style="color: #666; margin-bottom: 15px; font-size: 14px;">
+              Aquí puedes ver todas tus deudas, hacer seguimiento de pagos y actualizar el monto pendiente.
+            </p>
+            <div id="debtsList"></div>
+          </div>
         </div>
 
         <!-- Inversiones -->

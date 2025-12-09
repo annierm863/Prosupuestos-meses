@@ -12,6 +12,7 @@ import {
   collection,
   addDoc,
   getDocs,
+  getDoc,
   doc,
   updateDoc,
   deleteDoc,
@@ -2493,7 +2494,10 @@ function displayGoals(goals) {
                 <br>📅 ${daysLeft} días restantes
               </div>
             </div>
-            <button class="btn-small btn-danger" onclick="deleteGoal('${goal.id}')">🗑️</button>
+            <div style="display: flex; gap: 5px;">
+              <button class="btn-small" style="background: #3b82f6; color: white;" onclick="editGoal('${goal.id}')">✏️ Editar</button>
+              <button class="btn-small btn-danger" onclick="deleteGoal('${goal.id}')">🗑️</button>
+            </div>
           </div>
           <div style="width: 100%;">
             <div class="progress-bar">
@@ -2506,6 +2510,68 @@ function displayGoals(goals) {
     })
     .join("");
 }
+
+window.editGoal = async function (id) {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  try {
+    // Cargar la meta actual
+    const goalDoc = await getDoc(doc(db, "goals", id));
+    if (!goalDoc.exists()) {
+      showMessage("Meta no encontrada", "error");
+      return;
+    }
+
+    const goal = { id: goalDoc.id, ...goalDoc.data() };
+
+    // Mostrar formulario de edición
+    const newName = prompt("Nombre de la meta:", goal.name);
+    if (newName === null) return;
+
+    const newTarget = prompt("Monto objetivo:", goal.target);
+    if (newTarget === null) return;
+    const targetValue = parseFloat(newTarget);
+    if (isNaN(targetValue) || targetValue <= 0) {
+      showMessage("Monto objetivo inválido", "error");
+      return;
+    }
+
+    const newCurrent = prompt("Monto actual:", goal.current || 0);
+    if (newCurrent === null) return;
+    const currentValue = parseFloat(newCurrent);
+    if (isNaN(currentValue) || currentValue < 0) {
+      showMessage("Monto actual inválido", "error");
+      return;
+    }
+
+    const newDeadline = prompt("Fecha límite (YYYY-MM-DD):", goal.deadline);
+    if (newDeadline === null) return;
+    if (!newDeadline) {
+      showMessage("Fecha límite requerida", "error");
+      return;
+    }
+
+    showLoading("Actualizando meta...");
+    await updateDoc(doc(db, "goals", id), {
+      name: newName,
+      target: targetValue,
+      current: currentValue,
+      deadline: newDeadline,
+    });
+
+    cache.clear("goals");
+    await loadGoals();
+    showMessage("✅ Meta actualizada", "success");
+  } catch (error) {
+    showMessage("Error al actualizar meta: " + error.message, "error");
+    console.error("Error en editGoal:", error);
+  } finally {
+    hideLoading();
+  }
+};
 
 window.deleteGoal = async function (id) {
   if (!confirm("¿Estás seguro de eliminar esta meta?")) return;
@@ -3145,6 +3211,7 @@ window.addLiability = async function () {
       type,
       name,
       amount,
+      originalAmount: amount, // Guardar el monto original para calcular progreso
       interest,
       minPayment,
       createdAt: Timestamp.now(),
@@ -3465,6 +3532,94 @@ window.simulateFreedom = function () {
 
 // ============= GESTIÓN DE DEUDAS =============
 
+window.addDebt = async function () {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  const type = document.getElementById("debtType").value;
+  const name = document.getElementById("debtName").value;
+  const amount = parseFloat(document.getElementById("debtAmount").value);
+  const interest = parseFloat(document.getElementById("debtInterest").value) || 0;
+  const minPayment = parseFloat(document.getElementById("debtMinPayment").value) || 0;
+
+  if (!name || !amount || amount <= 0) {
+    showMessage("Por favor completa todos los campos correctamente", "error");
+    return;
+  }
+
+  try {
+    showLoading("Agregando deuda...");
+    const liabilityData = {
+      userId: currentUser.uid,
+      type,
+      name,
+      amount,
+      originalAmount: amount, // Guardar el monto original para calcular progreso
+      interest,
+      minPayment,
+      createdAt: Timestamp.now(),
+    };
+    await addDoc(collection(db, "liabilities"), liabilityData);
+    cache.clear("liabilities");
+    
+    // Limpiar formulario
+    document.getElementById("debtName").value = "";
+    document.getElementById("debtAmount").value = "";
+    document.getElementById("debtInterest").value = "";
+    document.getElementById("debtMinPayment").value = "";
+    
+    await displayDebts();
+    showMessage("✅ Deuda agregada exitosamente", "success");
+  } catch (error) {
+    handleError(error, "addDebt");
+  } finally {
+    hideLoading();
+  }
+};
+
+window.updateDebtAmount = async function (id) {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  try {
+    // Cargar la deuda actual
+    const debtDoc = await getDoc(doc(db, "liabilities", id));
+    if (!debtDoc.exists()) {
+      showMessage("Deuda no encontrada", "error");
+      return;
+    }
+
+    const debt = { id: debtDoc.id, ...debtDoc.data() };
+
+    const newAmount = prompt(`Monto actual de la deuda "${debt.name}":\n(Monto anterior: $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })})`, debt.amount);
+    if (newAmount === null) return;
+    
+    const amountValue = parseFloat(newAmount);
+    if (isNaN(amountValue) || amountValue < 0) {
+      showMessage("Monto inválido", "error");
+      return;
+    }
+
+    showLoading("Actualizando deuda...");
+    await updateDoc(doc(db, "liabilities", id), {
+      amount: amountValue,
+    });
+
+    cache.clear("liabilities");
+    await displayDebts();
+    await loadNetworth(); // Actualizar también la sección de patrimonio neto
+    showMessage("✅ Deuda actualizada", "success");
+  } catch (error) {
+    handleError(error, "updateDebtAmount");
+  } finally {
+    hideLoading();
+  }
+};
+
 async function loadDebts() {
   if (!currentUser) return [];
   const liabilities = await loadLiabilities();
@@ -3518,25 +3673,50 @@ async function displayDebts() {
 
     document.getElementById("debtsCards").innerHTML = cardsHTML;
 
-    const debtsHTML = debts
+    const debtsHTML = debts.length > 0 ? debts
       .map(
-        (debt) => `
-      <div class="card" style="margin-bottom: 15px; padding: 20px;">
+        (debt) => {
+          const progress = debt.originalAmount ? ((1 - debt.amount / debt.originalAmount) * 100).toFixed(1) : 0;
+          return `
+      <div class="card" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid #ef4444;">
         <div style="display: flex; justify-content: space-between; align-items: start;">
           <div style="flex: 1;">
-            <h4>${debt.name}</h4>
+            <h4 style="color: #333; margin-bottom: 10px;">${debt.name}</h4>
             <p style="color: #666; margin: 5px 0;"><strong>Tipo:</strong> ${debt.type}</p>
-            <p style="color: #666; margin: 5px 0;"><strong>Monto:</strong> $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
-            <p style="color: #666; margin: 5px 0;"><strong>Interés:</strong> ${debt.interest}% anual</p>
-            <p style="color: #666; margin: 5px 0;"><strong>Pago Mínimo:</strong> $${debt.minPayment.toLocaleString("es-ES", { minimumFractionDigits: 2 })}/mes</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Monto Actual:</strong> <span style="color: #ef4444; font-weight: bold;">$${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</span></p>
+            ${debt.originalAmount ? `<p style="color: #666; margin: 5px 0;"><strong>Monto Original:</strong> $${debt.originalAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>` : ''}
+            <p style="color: #666; margin: 5px 0;"><strong>Interés:</strong> ${debt.interest || 0}% anual</p>
+            <p style="color: #666; margin: 5px 0;"><strong>Pago Mínimo:</strong> $${(debt.minPayment || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })}/mes</p>
+            ${debt.originalAmount ? `
+            <div style="margin-top: 15px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span style="color: #666; font-size: 12px;">Progreso de pago</span>
+                <span style="color: #4ade80; font-weight: bold; font-size: 12px;">${progress}%</span>
+              </div>
+              <div style="background: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;">
+                <div style="background: #4ade80; height: 100%; width: ${progress}%; transition: width 0.3s;"></div>
+              </div>
+            </div>
+            ` : ''}
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px; margin-left: 15px;">
+            <button onclick="updateDebtAmount('${debt.id}')" style="background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">✏️ Actualizar</button>
+            <button onclick="deleteLiability('${debt.id}')" style="background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">🗑️ Eliminar</button>
           </div>
         </div>
       </div>
-    `
+    `;
+        }
       )
-      .join("");
+      .join("") : `
+      <div class="empty-state" style="text-align: center; padding: 40px; background: white; border-radius: 10px;">
+        <div style="font-size: 48px; margin-bottom: 15px;">💳</div>
+        <p style="color: #666; font-size: 16px;">No hay deudas registradas</p>
+        <p style="color: #999; font-size: 14px; margin-top: 5px;">Agrega tu primera deuda usando el formulario de arriba</p>
+      </div>
+    `;
 
-    document.getElementById("debtsList").innerHTML = debtsHTML || "<p>No hay deudas registradas</p>";
+    document.getElementById("debtsList").innerHTML = debtsHTML;
 
     updateDebtStrategy();
   } catch (error) {
