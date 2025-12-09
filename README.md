@@ -26,3 +26,4 @@ Si ves errores 404:
 2. Revisa la consola del navegador (F12) para ver qué archivo está fallando
 3. Asegúrate de que las rutas en el HTML sean correctas
 
+

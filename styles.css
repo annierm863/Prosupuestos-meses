@@ -269,7 +269,7 @@ body {
 }
 
 .nav-submenu {
-  max-height: 0;
+  max-height: 0 !important;
   overflow: hidden;
   transition: max-height 0.3s ease;
   background: rgba(0, 0, 0, 0.2);
@@ -277,7 +277,7 @@ body {
 
 .nav-category-header.active + .nav-submenu,
 .nav-submenu.active {
-  max-height: 500px;
+  max-height: 500px !important;
 }
 
 .nav-submenu .nav-item {

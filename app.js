@@ -2546,9 +2546,17 @@ window.toggleSidebar = function () {
 
 // Toggle categorías del menú
 window.toggleCategory = function (element) {
+  // Prevenir propagación del evento
+  if (event) {
+    event.stopPropagation();
+  }
+  
+  // Toggle clase active en el header
   element.classList.toggle("active");
+  
+  // Encontrar el submenu (siguiente elemento hermano)
   const submenu = element.nextElementSibling;
-  if (submenu) {
+  if (submenu && submenu.classList.contains("nav-submenu")) {
     submenu.classList.toggle("active");
   }
 };

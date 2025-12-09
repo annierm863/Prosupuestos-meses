@@ -114,6 +114,22 @@
       .sidebar .sidebar-nav {
         padding: 10px 0 !important;
       }
+      
+      /* Submenús - Asegurar que funcionen */
+      #sidebar .nav-submenu,
+      .sidebar .nav-submenu {
+        max-height: 0 !important;
+        overflow: hidden !important;
+        transition: max-height 0.3s ease !important;
+        background: rgba(0, 0, 0, 0.2) !important;
+      }
+      
+      #sidebar .nav-category-header.active + .nav-submenu,
+      #sidebar .nav-submenu.active,
+      .sidebar .nav-category-header.active + .nav-submenu,
+      .sidebar .nav-submenu.active {
+        max-height: 500px !important;
+      }
     </style>
     <!-- Chart.js para gráficos -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -172,7 +188,7 @@
               <span class="nav-text" style="flex: 1; font-size: 13px; color: rgba(255, 255, 255, 0.9) !important;">Gestión Semanal</span>
               <span class="nav-arrow" style="margin-left: auto; font-size: 12px; transition: transform 0.3s; color: rgba(255, 255, 255, 0.9) !important;">▼</span>
             </div>
-            <div class="nav-submenu" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease; background: rgba(0, 0, 0, 0.2);">
+            <div class="nav-submenu">
               <a href="#" class="nav-item" onclick="showTab('weeks', this); return false;" style="display: flex; align-items: center; padding: 12px 20px 12px 50px; color: rgba(255, 255, 255, 0.8) !important; text-decoration: none !important; transition: all 0.3s; border-left: 3px solid transparent; cursor: pointer; background: transparent; width: 100%; text-align: left; font-size: 13px;">
                 <span class="nav-icon" style="font-size: 16px; margin-right: 12px; width: 24px; text-align: center; color: rgba(255, 255, 255, 0.8) !important;">📆</span>
                 <span class="nav-text" style="flex: 1; font-size: 13px; color: rgba(255, 255, 255, 0.8) !important;">Semanas</span>
