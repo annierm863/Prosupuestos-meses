@@ -435,6 +435,39 @@ body {
   /* El color se define inline en el HTML, pero el título debe ser negro */
 }
 
+/* Forzar color negro en todos los elementos de texto dentro de las secciones */
+#investments .card h4,
+#investments .card strong,
+#investments .card p,
+#debts .card h4,
+#debts .card strong,
+#debts .card p,
+#debts #debtPlan h4,
+#debts #debtPlan strong,
+#debts #debtPlan li {
+  color: #333 !important;
+}
+
+/* Asegurar que las cards de lista también tengan fondo blanco y texto negro */
+#investmentsList .card,
+#debtsList .card {
+  background: white !important;
+  color: #333 !important;
+}
+
+#investmentsList .card *,
+#debtsList .card * {
+  color: #333 !important;
+}
+
+/* Excepciones: mantener colores específicos para valores numéricos */
+#investmentsList .card p[style*="color: #4ade80"],
+#investmentsList .card p[style*="color: #ef4444"],
+#debtsList .card span[style*="color: #ef4444"],
+#debtsList .card span[style*="color: #4ade80"] {
+  color: inherit !important;
+}
+
 .card-subtitle {
   font-size: 12px;
   opacity: 0.8;

@@ -3743,13 +3743,13 @@ window.updateDebtStrategy = function () {
 
     const planHTML = `
       <div class="card" style="background: #f0f9ff; padding: 20px; border-radius: 10px; margin-top: 15px;">
-        <h4>📋 Plan de Pago (${strategy === "snowball" ? "Bola de Nieve" : "Avalancha"})</h4>
+        <h4 style="color: #333 !important;">📋 Plan de Pago (${strategy === "snowball" ? "Bola de Nieve" : "Avalancha"})</h4>
         <ol style="margin-top: 15px;">
           ${sortedDebts
             .map(
               (debt, index) => `
-            <li style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 5px;">
-              <strong>${debt.name}</strong> - 
+            <li style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 5px; color: #333;">
+              <strong style="color: #333 !important;">${debt.name}</strong> - 
               Monto: $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} | 
               Interés: ${debt.interest}% | 
               Pago Mínimo: $${debt.minPayment.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
@@ -3759,7 +3759,7 @@ window.updateDebtStrategy = function () {
             .join("")}
         </ol>
         <p style="margin-top: 15px; color: #666;">
-          <strong>Estrategia:</strong> ${strategy === "snowball" ? "Paga primero la deuda más pequeña para ganar momentum psicológico" : "Paga primero la deuda con mayor interés para ahorrar más dinero"}
+          <strong style="color: #333 !important;">Estrategia:</strong> ${strategy === "snowball" ? "Paga primero la deuda más pequeña para ganar momentum psicológico" : "Paga primero la deuda con mayor interés para ahorrar más dinero"}
         </p>
       </div>
     `;
@@ -3890,14 +3890,14 @@ async function displayInvestments() {
         const returnAmount = (investment.currentValue || investment.amount) - investment.amount;
         const returnPct = investment.amount > 0 ? (returnAmount / investment.amount) * 100 : 0;
         return `
-      <div class="card" style="margin-bottom: 15px; padding: 20px;">
+      <div class="card" style="margin-bottom: 15px; padding: 20px; background: white !important; color: #333 !important;">
         <div style="display: flex; justify-content: space-between; align-items: start;">
           <div style="flex: 1;">
-            <h4>${investment.name} (${investment.type})</h4>
-            <p style="color: #666; margin: 5px 0;"><strong>Invertido:</strong> $${investment.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
-            <p style="color: #666; margin: 5px 0;"><strong>Valor Actual:</strong> $${(investment.currentValue || investment.amount).toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+            <h4 style="color: #333 !important; margin-bottom: 10px;">${investment.name} (${investment.type})</h4>
+            <p style="color: #666; margin: 5px 0;"><strong style="color: #333;">Invertido:</strong> $${investment.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+            <p style="color: #666; margin: 5px 0;"><strong style="color: #333;">Valor Actual:</strong> $${(investment.currentValue || investment.amount).toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
             <p style="color: ${returnPct >= 0 ? "#4ade80" : "#ef4444"}; margin: 5px 0;">
-              <strong>Rendimiento:</strong> $${returnAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} (${returnPct >= 0 ? "+" : ""}${returnPct.toFixed(2)}%)
+              <strong style="color: #333;">Rendimiento:</strong> $${returnAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} (${returnPct >= 0 ? "+" : ""}${returnPct.toFixed(2)}%)
             </p>
           </div>
           <button onclick="deleteInvestment('${investment.id}')" style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">🗑️</button>
