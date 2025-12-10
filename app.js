@@ -34,19 +34,11 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-window.auth = auth;
-window.db = db;
-window.firestore = {
-  collection,
-  addDoc,
-  getDocs,
-  doc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  Timestamp,
-};
+// ============= SEGURIDAD: Variables globales expuestas =============
+// NOTA: Estas variables están expuestas para compatibilidad, pero deberían
+// ser privadas en producción. Las reglas de Firestore deben proteger los datos.
+// window.auth = auth; // Comentado por seguridad - usar solo internamente
+// window.db = db; // Comentado por seguridad - usar solo internamente
 
 // ============= ESTADO GLOBAL =============
 let currentUser = null;
@@ -265,32 +257,12 @@ onAuthStateChanged(auth, (user) => {
 });
 
 // ============= FUNCIONES DE AUTENTICACIÓN =============
+// ============= REGISTRO DESHABILITADO - SOLO ADMIN =============
+// El registro público ha sido deshabilitado por seguridad.
+// Solo el administrador puede crear nuevas cuentas desde Firebase Console.
 window.register = async function () {
-  const email = document.getElementById("authEmail").value;
-  const password = document.getElementById("authPassword").value;
-
-  const errors = validateForm(
-    { email, password },
-    {
-      email: { required: true, type: "email", label: "Email" },
-      password: { required: true, min: 6, label: "Contraseña" },
-    }
-  );
-
-  if (errors.length > 0) {
-    showAuthMessage(errors.join(", "), "warning");
-    return;
-  }
-
-  try {
-    showLoading("Creando cuenta...");
-    await createUserWithEmailAndPassword(auth, email, password);
-    showAuthMessage("¡Cuenta creada exitosamente!", "success");
-  } catch (error) {
-    showAuthMessage("Error: " + getSpanishError(error.code), "warning");
-  } finally {
-    hideLoading();
-  }
+  showAuthMessage("⚠️ El registro está deshabilitado. Contacta al administrador para crear una cuenta.", "warning");
+  return;
 };
 
 window.login = async function () {
