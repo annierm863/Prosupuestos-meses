@@ -3935,6 +3935,24 @@ window.simulateFreedom = function () {
 
 // ============= GESTIÓN DE DEUDAS =============
 
+// Toggle campos de tarjeta de crédito
+window.toggleCreditCardFields = function () {
+  const type = document.getElementById("debtType").value;
+  const creditCardFields = document.getElementById("creditCardFields");
+  if (creditCardFields) {
+    creditCardFields.style.display = type === "Tarjeta de Crédito" ? "block" : "none";
+  }
+};
+
+// Toggle campos de 0% interés
+window.toggleZeroInterestFields = function () {
+  const hasZeroInterest = document.getElementById("debtHasZeroInterest").value;
+  const zeroInterestFields = document.getElementById("zeroInterestFields");
+  if (zeroInterestFields) {
+    zeroInterestFields.style.display = hasZeroInterest === "yes" ? "block" : "none";
+  }
+};
+
 window.addDebt = async function () {
   if (!currentUser) {
     showMessage("Debes iniciar sesión", "error");
@@ -3964,6 +3982,27 @@ window.addDebt = async function () {
       minPayment,
       createdAt: Timestamp.now(),
     };
+
+    // Agregar campos específicos de tarjeta de crédito
+    if (type === "Tarjeta de Crédito") {
+      const closingDay = parseInt(document.getElementById("debtClosingDay").value);
+      const paymentDay = parseInt(document.getElementById("debtPaymentDay").value);
+      const hasZeroInterest = document.getElementById("debtHasZeroInterest").value === "yes";
+      
+      if (closingDay && closingDay >= 1 && closingDay <= 31) {
+        liabilityData.closingDay = closingDay;
+      }
+      if (paymentDay && paymentDay >= 1 && paymentDay <= 31) {
+        liabilityData.paymentDay = paymentDay;
+      }
+      if (hasZeroInterest) {
+        const zeroInterestExpiry = document.getElementById("debtZeroInterestExpiry").value;
+        if (zeroInterestExpiry) {
+          liabilityData.zeroInterestExpiry = zeroInterestExpiry;
+        }
+      }
+    }
+
     await addDoc(collection(db, "liabilities"), liabilityData);
     cache.clear("liabilities");
     
@@ -3972,6 +4011,12 @@ window.addDebt = async function () {
     document.getElementById("debtAmount").value = "";
     document.getElementById("debtInterest").value = "";
     document.getElementById("debtMinPayment").value = "";
+    document.getElementById("debtClosingDay").value = "";
+    document.getElementById("debtPaymentDay").value = "";
+    document.getElementById("debtHasZeroInterest").value = "no";
+    document.getElementById("debtZeroInterestExpiry").value = "";
+    toggleCreditCardFields();
+    toggleZeroInterestFields();
     
     await displayDebts();
     showMessage("✅ Deuda agregada exitosamente", "success");
@@ -4018,6 +4063,187 @@ window.updateDebtAmount = async function (id) {
     showMessage("✅ Deuda actualizada", "success");
   } catch (error) {
     handleError(error, "updateDebtAmount");
+  } finally {
+    hideLoading();
+  }
+};
+
+// Registrar pago a una tarjeta/deuda
+window.registerPayment = async function (debtId) {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  try {
+    const debtDoc = await getDoc(doc(db, "liabilities", debtId));
+    if (!debtDoc.exists()) {
+      showMessage("Deuda no encontrada", "error");
+      return;
+    }
+
+    const debt = { id: debtDoc.id, ...debtDoc.data() };
+    
+    const paymentAmount = prompt(`Registrar pago para "${debt.name}"\nMonto actual: $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}\n\nIngresa el monto del pago:`, debt.minPayment || 0);
+    if (paymentAmount === null) return;
+    
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      showMessage("Monto inválido", "error");
+      return;
+    }
+
+    const paymentDate = prompt("Fecha del pago (YYYY-MM-DD):", new Date().toISOString().split("T")[0]);
+    if (paymentDate === null) return;
+
+    showLoading("Registrando pago...");
+    
+    // Registrar el pago en una subcolección
+    const paymentData = {
+      debtId: debtId,
+      userId: currentUser.uid,
+      amount: amount,
+      date: paymentDate,
+      createdAt: Timestamp.now(),
+    };
+    
+    await addDoc(collection(db, "debtPayments"), paymentData);
+    
+    // Actualizar el monto de la deuda
+    const newAmount = Math.max(0, debt.amount - amount);
+    await updateDoc(doc(db, "liabilities", debtId), {
+      amount: newAmount,
+    });
+
+    cache.clear("liabilities");
+    await displayDebts();
+    await loadNetworth();
+    showMessage(`✅ Pago de $${amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} registrado exitosamente`, "success");
+  } catch (error) {
+    handleError(error, "registerPayment");
+  } finally {
+    hideLoading();
+  }
+};
+
+// Mostrar historial de pagos
+window.showPaymentHistory = async function (debtId) {
+  if (!currentUser) return;
+
+  try {
+    showLoading("Cargando historial...");
+    
+    const debtDoc = await getDoc(doc(db, "liabilities", debtId));
+    if (!debtDoc.exists()) {
+      showMessage("Deuda no encontrada", "error");
+      return;
+    }
+
+    const debt = { id: debtDoc.id, ...debtDoc.data() };
+    
+    const q = query(
+      collection(db, "debtPayments"),
+      where("debtId", "==", debtId),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const payments = [];
+    
+    snapshot.forEach((doc) => {
+      payments.push({ id: doc.id, ...doc.data() });
+    });
+    
+    payments.sort((a, b) => {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      return dateB - dateA;
+    });
+
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    
+    const content = `
+      <div style="padding: 20px;">
+        <h3 style="color: #333; margin-bottom: 15px;">📋 Historial de Pagos: ${debt.name}</h3>
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+          <p style="color: #666; margin: 5px 0;"><strong>Total Pagado:</strong> <span style="color: #10b981; font-weight: bold; font-size: 18px;">$${totalPaid.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</span></p>
+          <p style="color: #666; margin: 5px 0;"><strong>Monto Actual:</strong> $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+          <p style="color: #666; margin: 5px 0;"><strong>Total de Pagos:</strong> ${payments.length}</p>
+        </div>
+        
+        ${payments.length > 0 ? `
+        <h4 style="color: #333; margin-bottom: 10px;">Pagos Registrados:</h4>
+        <div style="max-height: 400px; overflow-y: auto;">
+          ${payments.map(payment => `
+            <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #10b981;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <p style="color: #333; margin: 0; font-weight: 600;">$${payment.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+                  <p style="color: #666; margin: 5px 0 0 0; font-size: 13px;">📅 ${formatDate(payment.date)}</p>
+                </div>
+                <button onclick="deletePayment('${payment.id}', '${debtId}')" style="background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 11px;">🗑️</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        ` : `
+        <div style="text-align: center; padding: 40px; background: #f8f9fa; border-radius: 10px;">
+          <div style="font-size: 48px; margin-bottom: 15px;">💰</div>
+          <p style="color: #666;">No hay pagos registrados aún</p>
+        </div>
+        `}
+      </div>
+    `;
+
+    document.getElementById("modalTitle").textContent = "Historial de Pagos";
+    document.getElementById("modalBody").innerHTML = content;
+    document.getElementById("detailModal").classList.add("active");
+  } catch (error) {
+    handleError(error, "showPaymentHistory");
+  } finally {
+    hideLoading();
+  }
+};
+
+// Eliminar pago
+window.deletePayment = async function (paymentId, debtId) {
+  if (!confirm("¿Estás seguro de eliminar este pago? El monto se agregará de vuelta a la deuda.")) return;
+
+  try {
+    showLoading("Eliminando pago...");
+    
+    const paymentDoc = await getDoc(doc(db, "debtPayments", paymentId));
+    if (!paymentDoc.exists()) {
+      showMessage("Pago no encontrado", "error");
+      return;
+    }
+
+    const payment = paymentDoc.data();
+    const debtDoc = await getDoc(doc(db, "liabilities", debtId));
+    if (!debtDoc.exists()) {
+      showMessage("Deuda no encontrada", "error");
+      return;
+    }
+
+    const debt = debtDoc.data();
+    
+    // Restaurar el monto a la deuda
+    await updateDoc(doc(db, "liabilities", debtId), {
+      amount: debt.amount + payment.amount,
+    });
+    
+    // Eliminar el pago
+    await deleteDoc(doc(db, "debtPayments", paymentId));
+
+    cache.clear("liabilities");
+    await displayDebts();
+    await loadNetworth();
+    showMessage("✅ Pago eliminado", "success");
+    
+    // Cerrar modal y recargar historial
+    closeModal();
+    await showPaymentHistory(debtId);
+  } catch (error) {
+    handleError(error, "deletePayment");
   } finally {
     hideLoading();
   }
@@ -4080,8 +4306,58 @@ async function displayDebts() {
       .map(
         (debt) => {
           const progress = debt.originalAmount ? ((1 - debt.amount / debt.originalAmount) * 100).toFixed(1) : 0;
+          
+          // Calcular alertas y fechas importantes
+          const alerts = [];
+          const today = new Date();
+          const currentDay = today.getDate();
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          
+          // Alerta para fecha de cierre
+          if (debt.closingDay) {
+            const daysUntilClosing = debt.closingDay >= currentDay 
+              ? debt.closingDay - currentDay 
+              : (new Date(currentYear, currentMonth + 1, 0).getDate() - currentDay) + debt.closingDay;
+            if (daysUntilClosing <= 3 && daysUntilClosing >= 0) {
+              alerts.push({ type: "warning", message: `⚠️ Cierre de ciclo en ${daysUntilClosing} día(s) (día ${debt.closingDay})` });
+            }
+          }
+          
+          // Alerta para fecha de pago
+          if (debt.paymentDay) {
+            const daysUntilPayment = debt.paymentDay >= currentDay 
+              ? debt.paymentDay - currentDay 
+              : (new Date(currentYear, currentMonth + 1, 0).getDate() - currentDay) + debt.paymentDay;
+            if (daysUntilPayment <= 5 && daysUntilPayment >= 0) {
+              alerts.push({ type: "danger", message: `🔴 Pago vence en ${daysUntilPayment} día(s) (día ${debt.paymentDay})` });
+            }
+          }
+          
+          // Alerta para caducidad de 0% interés
+          if (debt.zeroInterestExpiry) {
+            const expiryDate = new Date(debt.zeroInterestExpiry);
+            const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+            if (daysUntilExpiry <= 30 && daysUntilExpiry >= 0) {
+              alerts.push({ type: "info", message: `ℹ️ 0% interés caduca en ${daysUntilExpiry} día(s)` });
+            } else if (daysUntilExpiry < 0) {
+              alerts.push({ type: "danger", message: `🔴 0% interés caducó hace ${Math.abs(daysUntilExpiry)} día(s)` });
+            }
+          }
+          
           return `
       <div class="card" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid #ef4444;">
+        ${alerts.length > 0 ? `
+        <div style="margin-bottom: 15px;">
+          ${alerts.map(alert => `
+            <div style="background: ${alert.type === 'danger' ? '#fee2e2' : alert.type === 'warning' ? '#fef3c7' : '#dbeafe'}; 
+                        color: ${alert.type === 'danger' ? '#991b1b' : alert.type === 'warning' ? '#92400e' : '#1e40af'}; 
+                        padding: 10px; border-radius: 5px; margin-bottom: 5px; font-size: 13px; font-weight: 500;">
+              ${alert.message}
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
         <div style="display: flex; justify-content: space-between; align-items: start;">
           <div style="flex: 1;">
             <h4 style="color: #333; margin-bottom: 10px;">${debt.name}</h4>
@@ -4090,6 +4366,11 @@ async function displayDebts() {
             ${debt.originalAmount ? `<p style="color: #666; margin: 5px 0;"><strong>Monto Original:</strong> $${debt.originalAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>` : ''}
             <p style="color: #666; margin: 5px 0;"><strong>Interés:</strong> ${debt.interest || 0}% anual</p>
             <p style="color: #666; margin: 5px 0;"><strong>Pago Mínimo:</strong> $${(debt.minPayment || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })}/mes</p>
+            
+            ${debt.closingDay ? `<p style="color: #666; margin: 5px 0;"><strong>📅 Cierre de Ciclo:</strong> Día ${debt.closingDay} de cada mes</p>` : ''}
+            ${debt.paymentDay ? `<p style="color: #666; margin: 5px 0;"><strong>💳 Fecha de Pago:</strong> Día ${debt.paymentDay} de cada mes</p>` : ''}
+            ${debt.zeroInterestExpiry ? `<p style="color: #666; margin: 5px 0;"><strong>⏰ 0% Interés hasta:</strong> ${formatDate(debt.zeroInterestExpiry)}</p>` : ''}
+            
             ${debt.originalAmount ? `
             <div style="margin-top: 15px;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
@@ -4103,6 +4384,8 @@ async function displayDebts() {
             ` : ''}
           </div>
           <div style="display: flex; flex-direction: column; gap: 5px; margin-left: 15px;">
+            <button onclick="registerPayment('${debt.id}')" style="background: #10b981; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">💰 Registrar Pago</button>
+            <button onclick="showPaymentHistory('${debt.id}')" style="background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">📋 Historial</button>
             <button onclick="updateDebtAmount('${debt.id}')" style="background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">✏️ Actualizar</button>
             <button onclick="deleteLiability('${debt.id}')" style="background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">🗑️ Eliminar</button>
           </div>

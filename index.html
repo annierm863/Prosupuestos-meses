@@ -884,7 +884,7 @@
             </p>
             <div class="form-group">
               <label>Tipo de Deuda:</label>
-              <select id="debtType">
+              <select id="debtType" onchange="toggleCreditCardFields()">
                 <option value="Tarjeta de Crédito">💳 Tarjeta de Crédito</option>
                 <option value="Préstamo Personal">📋 Préstamo Personal</option>
                 <option value="Hipoteca">🏠 Hipoteca</option>
@@ -909,6 +909,33 @@
             <div class="form-group">
               <label>Pago Mínimo Mensual:</label>
               <input type="number" id="debtMinPayment" placeholder="0.00" step="0.01" />
+            </div>
+            <!-- Campos adicionales para tarjetas de crédito -->
+            <div id="creditCardFields" style="display: none;">
+              <div class="form-group">
+                <label>Fecha de Cierre de Ciclo (día del mes):</label>
+                <input type="number" id="debtClosingDay" placeholder="Ej: 15" min="1" max="31" />
+                <small style="color: #666;">Día del mes en que cierra el ciclo (1-31)</small>
+              </div>
+              <div class="form-group">
+                <label>Fecha de Pago (día del mes):</label>
+                <input type="number" id="debtPaymentDay" placeholder="Ej: 25" min="1" max="31" />
+                <small style="color: #666;">Día del mes en que debes pagar (1-31)</small>
+              </div>
+              <div class="form-group">
+                <label>¿Tiene 0% de interés?</label>
+                <select id="debtHasZeroInterest" onchange="toggleZeroInterestFields()">
+                  <option value="no">No</option>
+                  <option value="yes">Sí</option>
+                </select>
+              </div>
+              <div id="zeroInterestFields" style="display: none;">
+                <div class="form-group">
+                  <label>Fecha de Caducidad del 0% de Interés:</label>
+                  <input type="date" id="debtZeroInterestExpiry" />
+                  <small style="color: #666;">Fecha en que caduca la promoción de 0%</small>
+                </div>
+              </div>
             </div>
             <button onclick="addDebt()">➕ Agregar Deuda</button>
           </div>
