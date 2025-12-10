@@ -376,27 +376,63 @@ body {
   font-weight: bold;
 }
 
-/* Corregir color de texto en cards con fondo claro */
+/* Corregir color de texto en cards con fondo claro - TODAS LAS SECCIONES */
 #trends .card,
 #budgets .card,
-#networth .card {
+#networth .card,
+#debts .card,
+#investments .card,
+#freedom .card {
   background: white !important;
   color: #333 !important;
 }
 
-#trends .card h3,
-#budgets .card h3,
-#networth .card h3,
-#trends .card-header h3,
-#budgets .card-header h3,
-#networth .card-header h3 {
+/* Forzar color negro en todos los textos dentro de las cards */
+#trends .card *,
+#budgets .card *,
+#networth .card *,
+#debts .card *,
+#investments .card *,
+#freedom .card * {
   color: #333 !important;
 }
 
+/* Títulos y headers en negro */
+#trends .card h3,
+#budgets .card h3,
+#networth .card h3,
+#debts .card h3,
+#investments .card h3,
+#freedom .card h3,
+#trends .card-header,
+#budgets .card-header,
+#networth .card-header,
+#debts .card-header,
+#investments .card-header,
+#freedom .card-header,
+#trends .card-header h3,
+#budgets .card-header h3,
+#networth .card-header h3,
+#debts .card-header h3,
+#investments .card-header h3,
+#freedom .card-header h3,
+#trends .card-header *,
+#budgets .card-header *,
+#networth .card-header *,
+#debts .card-header *,
+#investments .card-header *,
+#freedom .card-header * {
+  color: #333 !important;
+}
+
+/* Los valores mantienen su color específico (rojo, verde, azul, etc.) pero los títulos son negros */
 #trends .card .card-value,
 #budgets .card .card-value,
-#networth .card .card-value {
-  color: inherit !important;
+#networth .card .card-value,
+#debts .card .card-value,
+#investments .card .card-value,
+#freedom .card .card-value {
+  /* El color se define inline en el HTML, pero el título debe ser negro */
 }
 
 .card-subtitle {

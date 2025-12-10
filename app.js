@@ -3268,12 +3268,12 @@ async function loadNetworth() {
     const cardsHTML = cards
       .map(
         (card) => `
-      <div class="card" style="border-left: 5px solid ${card.color}">
-        <div class="card-header">
+      <div class="card" style="border-left: 5px solid ${card.color}; background: white !important; color: #333 !important;">
+        <div class="card-header" style="color: #333 !important;">
           <span style="font-size: 24px">${card.icon}</span>
-          <h3>${card.title}</h3>
+          <h3 style="color: #333 !important; margin: 0;">${card.title}</h3>
         </div>
-        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+        <div class="card-value" style="color: ${card.color} !important;">${card.value}</div>
       </div>
     `
       )
@@ -3475,12 +3475,12 @@ window.calculateFreedom = function () {
   const cardsHTML = cards
     .map(
       (card) => `
-    <div class="card" style="border-left: 5px solid ${card.color}">
-      <div class="card-header">
+    <div class="card" style="border-left: 5px solid ${card.color}; background: white !important; color: #333 !important;">
+      <div class="card-header" style="color: #333 !important;">
         <span style="font-size: 24px">${card.icon}</span>
-        <h3>${card.title}</h3>
+        <h3 style="color: #333 !important; margin: 0;">${card.title}</h3>
       </div>
-      <div class="card-value" style="color: ${card.color}">${card.value}</div>
+      <div class="card-value" style="color: ${card.color} !important;">${card.value}</div>
     </div>
   `
     )
@@ -3660,12 +3660,12 @@ async function displayDebts() {
     const cardsHTML = cards
       .map(
         (card) => `
-      <div class="card" style="border-left: 5px solid ${card.color}">
-        <div class="card-header">
+      <div class="card" style="border-left: 5px solid ${card.color}; background: white !important; color: #333 !important;">
+        <div class="card-header" style="color: #333 !important;">
           <span style="font-size: 24px">${card.icon}</span>
-          <h3>${card.title}</h3>
+          <h3 style="color: #333 !important; margin: 0;">${card.title}</h3>
         </div>
-        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+        <div class="card-value" style="color: ${card.color} !important;">${card.value}</div>
       </div>
     `
       )
@@ -3872,12 +3872,12 @@ async function displayInvestments() {
     const cardsHTML = cards
       .map(
         (card) => `
-      <div class="card" style="border-left: 5px solid ${card.color}">
-        <div class="card-header">
+      <div class="card" style="border-left: 5px solid ${card.color}; background: white !important; color: #333 !important;">
+        <div class="card-header" style="color: #333 !important;">
           <span style="font-size: 24px">${card.icon}</span>
-          <h3>${card.title}</h3>
+          <h3 style="color: #333 !important; margin: 0;">${card.title}</h3>
         </div>
-        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+        <div class="card-value" style="color: ${card.color} !important;">${card.value}</div>
       </div>
     `
       )
@@ -4079,12 +4079,12 @@ async function displayBudgets() {
     const cardsHTML = cards
       .map(
         (card) => `
-      <div class="card" style="border-left: 5px solid ${card.color}">
-        <div class="card-header">
+      <div class="card" style="border-left: 5px solid ${card.color}; background: white !important; color: #333 !important;">
+        <div class="card-header" style="color: #333 !important;">
           <span style="font-size: 24px">${card.icon}</span>
-          <h3>${card.title}</h3>
+          <h3 style="color: #333 !important; margin: 0;">${card.title}</h3>
         </div>
-        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+        <div class="card-value" style="color: ${card.color} !important;">${card.value}</div>
       </div>
     `
       )
@@ -4258,12 +4258,12 @@ async function loadTrends() {
     const cardsHTML = cards
       .map(
         (card) => `
-      <div class="card" style="border-left: 5px solid ${card.color}">
-        <div class="card-header">
+      <div class="card" style="border-left: 5px solid ${card.color}; background: white !important; color: #333 !important;">
+        <div class="card-header" style="color: #333 !important;">
           <span style="font-size: 24px">${card.icon}</span>
-          <h3>${card.title}</h3>
+          <h3 style="color: #333 !important; margin: 0;">${card.title}</h3>
         </div>
-        <div class="card-value" style="color: ${card.color}">${card.value}</div>
+        <div class="card-value" style="color: ${card.color} !important;">${card.value}</div>
       </div>
     `
       )
