@@ -580,6 +580,10 @@
               <select id="workType">
                 <option value="Gasolina">⛽ Gasolina</option>
                 <option value="Comida">🍔 Comida</option>
+                <option value="Servicios">🔧 Servicios</option>
+                <option value="Mantenimiento">🛠️ Mantenimiento</option>
+                <option value="Reparaciones">🔨 Reparaciones</option>
+                <option value="Otros">📦 Otros</option>
               </select>
             </div>
             <div class="form-group">
@@ -618,6 +622,51 @@
 
           <h3>Lista de Gastos de Trabajo</h3>
           <div id="workList"></div>
+
+          <!-- Análisis de Gastos de Trabajo -->
+          <div style="margin-top: 30px; background: #f8f9fa; padding: 20px; border-radius: 15px;">
+            <h3>📊 Análisis de Gastos de Trabajo</h3>
+            <p style="color: #666; font-size: 14px; margin-bottom: 20px;">
+              Análisis completo e independiente de tus gastos de trabajo (semanal y mensual)
+            </p>
+
+            <!-- Resumen Semanal -->
+            <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+              <h4 style="color: #8b5cf6; margin-bottom: 15px;">📅 Resumen Semanal</h4>
+              <div id="workWeeklySummary" class="dashboard-grid"></div>
+            </div>
+
+            <!-- Resumen Mensual -->
+            <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+              <h4 style="color: #8b5cf6; margin-bottom: 15px;">📆 Resumen Mensual</h4>
+              <div class="form-group" style="margin-bottom: 15px;">
+                <label>Seleccionar Mes:</label>
+                <input type="month" id="workMonthSelector" onchange="loadWorkMonthlyAnalysis()" />
+              </div>
+              <div id="workMonthlySummary" class="dashboard-grid"></div>
+            </div>
+
+            <!-- Gastos por Categoría -->
+            <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+              <h4 style="color: #8b5cf6; margin-bottom: 15px;">📊 Gastos por Categoría</h4>
+              <div class="form-group" style="margin-bottom: 15px;">
+                <label>Período:</label>
+                <select id="workCategoryPeriod" onchange="loadWorkCategoryAnalysis()">
+                  <option value="week">Semana Actual</option>
+                  <option value="month">Mes Actual</option>
+                </select>
+              </div>
+              <div id="workCategorySummary"></div>
+            </div>
+
+            <!-- Gráfico de Gastos -->
+            <div style="background: white; padding: 20px; border-radius: 10px;">
+              <h4 style="color: #8b5cf6; margin-bottom: 15px;">📈 Evolución de Gastos</h4>
+              <div class="chart-container">
+                <canvas id="workExpensesChart"></canvas>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Resumen Mensual -->

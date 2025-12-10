@@ -378,6 +378,11 @@ function setDefaultDates() {
   if (investmentDateInput) {
     investmentDateInput.value = today;
   }
+  // Inicializar selector de mes para análisis de gastos de trabajo
+  const workMonthSelector = document.getElementById("workMonthSelector");
+  if (workMonthSelector) {
+    workMonthSelector.value = currentMonth;
+  }
 }
 
 // ============= GESTIÓN DE SEMANAS =============
@@ -1234,6 +1239,18 @@ async function loadWorkExpenses() {
   }
 }
 
+function getWorkTypeEmoji(type) {
+  const emojis = {
+    "Gasolina": "⛽",
+    "Comida": "🍔",
+    "Servicios": "🔧",
+    "Mantenimiento": "🛠️",
+    "Reparaciones": "🔨",
+    "Otros": "📦"
+  };
+  return emojis[type] || "📦";
+}
+
 function displayWorkExpenses(expenses) {
   const container = document.getElementById("workList");
 
@@ -1244,6 +1261,10 @@ function displayWorkExpenses(expenses) {
         <p>No hay gastos de trabajo registrados</p>
       </div>
     `;
+    // Limpiar análisis si no hay datos
+    if (document.getElementById("workWeeklySummary")) {
+      document.getElementById("workWeeklySummary").innerHTML = "";
+    }
     return;
   }
 
@@ -1252,7 +1273,7 @@ function displayWorkExpenses(expenses) {
       (expense) => `
       <div class="list-item" style="--item-color: #8b5cf6;">
         <div class="list-item-info">
-          <div class="list-item-title">${expense.type === "Gasolina" ? "⛽" : "🍔"} ${expense.type}</div>
+          <div class="list-item-title">${getWorkTypeEmoji(expense.type)} ${expense.type}</div>
           <div class="list-item-details">
             ${expense.description} • 📅 ${formatDate(expense.date)}
           </div>
@@ -1266,6 +1287,9 @@ function displayWorkExpenses(expenses) {
     `
     )
     .join("");
+
+  // Actualizar análisis después de mostrar la lista
+  updateWorkAnalysis(expenses);
 }
 
 window.editWork = function (id, expense) {
@@ -1436,6 +1460,12 @@ async function updateDashboard() {
     await loadIncomes();
     await loadExpenses();
     await loadWorkExpenses();
+    
+    // Actualizar análisis de gastos de trabajo
+    if (currentWeek) {
+      const workExpenses = await getWeekData("workExpenses", currentWeek.id);
+      updateWorkAnalysis(workExpenses);
+    }
   } catch (error) {
     const errorMessage = handleError(error, "updateDashboard");
     showMessage(errorMessage, "error");
@@ -2859,6 +2889,342 @@ function createExpensesChart(data) {
 }
 
 // Los gráficos ahora se crean dentro de updateDashboard
+
+// ============= ANÁLISIS DE GASTOS DE TRABAJO =============
+async function updateWorkAnalysis(expenses) {
+  if (!expenses || expenses.length === 0) {
+    if (document.getElementById("workWeeklySummary")) {
+      document.getElementById("workWeeklySummary").innerHTML = `
+        <div class="empty-state">
+          <p>No hay gastos registrados esta semana</p>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  // Calcular resumen semanal
+  const totalWeekly = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const weeklyByCategory = {};
+  expenses.forEach(expense => {
+    if (!weeklyByCategory[expense.type]) {
+      weeklyByCategory[expense.type] = { total: 0, count: 0 };
+    }
+    weeklyByCategory[expense.type].total += expense.amount;
+    weeklyByCategory[expense.type].count += 1;
+  });
+
+  // Mostrar resumen semanal
+  if (document.getElementById("workWeeklySummary")) {
+    const weeklyCards = [
+      {
+        title: "Total Semanal",
+        value: `$${totalWeekly.toFixed(2)}`,
+        subtitle: `${expenses.length} gasto(s)`,
+        color1: "#8b5cf6",
+        color2: "#7c3aed"
+      },
+      ...Object.entries(weeklyByCategory).map(([type, data]) => ({
+        title: `${getWorkTypeEmoji(type)} ${type}`,
+        value: `$${data.total.toFixed(2)}`,
+        subtitle: `${data.count} registro(s)`,
+        color1: "#6366f1",
+        color2: "#4f46e5"
+      }))
+    ];
+
+    document.getElementById("workWeeklySummary").innerHTML = weeklyCards
+      .map(card => `
+        <div class="card" style="--color1: ${card.color1}; --color2: ${card.color2};">
+          <div class="card-title">${card.title}</div>
+          <div class="card-value">${card.value}</div>
+          ${card.subtitle ? `<div class="card-subtitle">${card.subtitle}</div>` : ""}
+        </div>
+      `).join("");
+  }
+
+  // Cargar análisis mensual si hay selector
+  if (document.getElementById("workMonthSelector")) {
+    const monthValue = document.getElementById("workMonthSelector").value || 
+      new Date().toISOString().slice(0, 7);
+    await loadWorkMonthlyAnalysis(monthValue);
+  }
+
+  // Cargar análisis por categoría
+  if (document.getElementById("workCategoryPeriod")) {
+    await loadWorkCategoryAnalysis();
+  }
+
+  // Actualizar gráfico
+  updateWorkExpensesChart(expenses);
+}
+
+async function loadWorkMonthlyAnalysis(monthValue = null) {
+  if (!currentUser) return;
+
+  try {
+    showLoading("Cargando análisis mensual...");
+    
+    const month = monthValue || document.getElementById("workMonthSelector")?.value || 
+      new Date().toISOString().slice(0, 7);
+    
+    if (!month) return;
+
+    const [year, monthNum] = month.split("-").map(Number);
+    const startDate = new Date(year, monthNum - 1, 1);
+    const endDate = new Date(year, monthNum, 0, 23, 59, 59);
+
+    // Obtener todas las semanas del mes
+    const q = query(
+      collection(db, "weeks"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const weeks = [];
+    
+    snapshot.forEach((doc) => {
+      const weekData = { id: doc.id, ...doc.data() };
+      const weekStart = new Date(weekData.startDate);
+      if (weekStart >= startDate && weekStart <= endDate) {
+        weeks.push(weekData);
+      }
+    });
+
+    // Obtener todos los gastos de trabajo del mes
+    let allWorkExpenses = [];
+    for (const week of weeks) {
+      const weekExpenses = await getWeekData("workExpenses", week.id);
+      allWorkExpenses = [...allWorkExpenses, ...weekExpenses];
+    }
+
+    // Filtrar por mes
+    allWorkExpenses = allWorkExpenses.filter(expense => {
+      const expenseDate = new Date(expense.date);
+      return expenseDate >= startDate && expenseDate <= endDate;
+    });
+
+    // Calcular resumen mensual
+    const totalMonthly = allWorkExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const monthlyByCategory = {};
+    allWorkExpenses.forEach(expense => {
+      if (!monthlyByCategory[expense.type]) {
+        monthlyByCategory[expense.type] = { total: 0, count: 0 };
+      }
+      monthlyByCategory[expense.type].total += expense.amount;
+      monthlyByCategory[expense.type].count += 1;
+    });
+
+    // Mostrar resumen mensual
+    if (document.getElementById("workMonthlySummary")) {
+      const monthlyCards = [
+        {
+          title: "Total Mensual",
+          value: `$${totalMonthly.toFixed(2)}`,
+          subtitle: `${allWorkExpenses.length} gasto(s)`,
+          color1: "#8b5cf6",
+          color2: "#7c3aed"
+        },
+        ...Object.entries(monthlyByCategory).map(([type, data]) => ({
+          title: `${getWorkTypeEmoji(type)} ${type}`,
+          value: `$${data.total.toFixed(2)}`,
+          subtitle: `${data.count} registro(s)`,
+          color1: "#6366f1",
+          color2: "#4f46e5"
+        }))
+      ];
+
+      document.getElementById("workMonthlySummary").innerHTML = monthlyCards.length > 0
+        ? monthlyCards.map(card => `
+            <div class="card" style="--color1: ${card.color1}; --color2: ${card.color2};">
+              <div class="card-title">${card.title}</div>
+              <div class="card-value">${card.value}</div>
+              ${card.subtitle ? `<div class="card-subtitle">${card.subtitle}</div>` : ""}
+            </div>
+          `).join("")
+        : `
+          <div class="empty-state">
+            <p>No hay gastos registrados en este mes</p>
+          </div>
+        `;
+    }
+  } catch (error) {
+    showMessage("Error al cargar análisis mensual: " + error.message, "error");
+    console.error("Error en loadWorkMonthlyAnalysis:", error);
+  } finally {
+    hideLoading();
+  }
+}
+
+async function loadWorkCategoryAnalysis() {
+  if (!currentUser || !currentWeek) return;
+
+  try {
+    const period = document.getElementById("workCategoryPeriod")?.value || "week";
+    let expenses = [];
+
+    if (period === "week") {
+      // Gastos de la semana actual
+      expenses = await getWeekData("workExpenses", currentWeek.id);
+    } else {
+      // Gastos del mes actual
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0, 23, 59, 59);
+
+      const q = query(
+        collection(db, "weeks"),
+        where("userId", "==", currentUser.uid)
+      );
+      const snapshot = await getDocs(q);
+      const weeks = [];
+      
+      snapshot.forEach((doc) => {
+        const weekData = { id: doc.id, ...doc.data() };
+        const weekStart = new Date(weekData.startDate);
+        if (weekStart >= startDate && weekStart <= endDate) {
+          weeks.push(weekData);
+        }
+      });
+
+      for (const week of weeks) {
+        const weekExpenses = await getWeekData("workExpenses", week.id);
+        expenses = [...expenses, ...weekExpenses.filter(e => {
+          const expenseDate = new Date(e.date);
+          return expenseDate >= startDate && expenseDate <= endDate;
+        })];
+      }
+    }
+
+    // Agrupar por categoría
+    const byCategory = {};
+    expenses.forEach(expense => {
+      if (!byCategory[expense.type]) {
+        byCategory[expense.type] = { total: 0, count: 0, items: [] };
+      }
+      byCategory[expense.type].total += expense.amount;
+      byCategory[expense.type].count += 1;
+      byCategory[expense.type].items.push(expense);
+    });
+
+    // Mostrar resumen por categoría
+    if (document.getElementById("workCategorySummary")) {
+      const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+      
+      if (Object.keys(byCategory).length === 0) {
+        document.getElementById("workCategorySummary").innerHTML = `
+          <div class="empty-state">
+            <p>No hay gastos registrados en este período</p>
+          </div>
+        `;
+        return;
+      }
+
+      const categoryHTML = Object.entries(byCategory)
+        .sort((a, b) => b[1].total - a[1].total)
+        .map(([type, data]) => {
+          const percentage = total > 0 ? ((data.total / total) * 100).toFixed(1) : 0;
+          return `
+            <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid #8b5cf6;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div>
+                  <h4 style="color: #333; margin: 0;">${getWorkTypeEmoji(type)} ${type}</h4>
+                  <p style="color: #666; font-size: 14px; margin: 5px 0 0 0;">${data.count} registro(s)</p>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 24px; font-weight: bold; color: #8b5cf6;">$${data.total.toFixed(2)}</div>
+                  <div style="font-size: 12px; color: #666;">${percentage}% del total</div>
+                </div>
+              </div>
+              <div class="progress-bar" style="margin-top: 10px;">
+                <div class="progress-fill" style="width: ${percentage}%; background: #8b5cf6;"></div>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+      document.getElementById("workCategorySummary").innerHTML = `
+        <div style="background: #f0f4ff; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin: 0; color: #333;">Total ${period === "week" ? "Semanal" : "Mensual"}</h4>
+            <div style="font-size: 28px; font-weight: bold; color: #8b5cf6;">$${total.toFixed(2)}</div>
+          </div>
+        </div>
+        ${categoryHTML}
+      `;
+    }
+  } catch (error) {
+    showMessage("Error al cargar análisis por categoría: " + error.message, "error");
+    console.error("Error en loadWorkCategoryAnalysis:", error);
+  }
+}
+
+function updateWorkExpensesChart(expenses) {
+  try {
+    const ctx = document.getElementById("workExpensesChart");
+    if (!ctx) return;
+
+    // Destruir gráfico anterior si existe
+    if (window.workExpensesChartInstance) {
+      window.workExpensesChartInstance.destroy();
+    }
+
+    // Agrupar por categoría
+    const byCategory = {};
+    expenses.forEach(expense => {
+      if (!byCategory[expense.type]) {
+        byCategory[expense.type] = 0;
+      }
+      byCategory[expense.type] += expense.amount;
+    });
+
+    const categories = Object.keys(byCategory);
+    const amounts = Object.values(byCategory);
+
+    if (categories.length === 0) return;
+
+    window.workExpensesChartInstance = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels: categories.map(cat => `${getWorkTypeEmoji(cat)} ${cat}`),
+        datasets: [{
+          label: "Gastos por Categoría",
+          data: amounts,
+          backgroundColor: [
+            "#8b5cf6",
+            "#6366f1",
+            "#4f46e5",
+            "#7c3aed",
+            "#a78bfa",
+            "#c4b5fd"
+          ],
+          borderWidth: 2,
+          borderColor: "#fff"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom"
+          },
+          title: {
+            display: true,
+            text: "Distribución de Gastos de Trabajo"
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error al crear gráfico de gastos de trabajo:", error);
+  }
+}
+
+// Hacer funciones accesibles globalmente
+window.loadWorkMonthlyAnalysis = loadWorkMonthlyAnalysis;
+window.loadWorkCategoryAnalysis = loadWorkCategoryAnalysis;
 
 // ============= NOTIFICACIONES PARA METAS =============
 async function checkGoalsNotifications() {
