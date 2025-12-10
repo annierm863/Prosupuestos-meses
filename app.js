@@ -355,6 +355,14 @@ async function initApp() {
     await updateDashboard();
     await loadGoals();
     
+    // Inicializar campos de tarjeta de crédito (ocultos por defecto)
+    if (document.getElementById("creditCardFields")) {
+      document.getElementById("creditCardFields").style.display = "none";
+    }
+    if (document.getElementById("zeroInterestFields")) {
+      document.getElementById("zeroInterestFields").style.display = "none";
+    }
+    
     // Inicializar sidebar: expandir categoría activa si hay un item activo
     const activeItem = document.querySelector(".nav-item.active");
     if (activeItem) {
@@ -1747,6 +1755,13 @@ function showDetailModal(title, items) {
 window.closeModal = function () {
   document.getElementById("detailModal").classList.remove("active");
 };
+
+// Cerrar modal de pago al hacer clic fuera
+document.getElementById("paymentModal")?.addEventListener("click", function (e) {
+  if (e.target === this) {
+    closePaymentModal();
+  }
+});
 
 // ============= RESUMEN MENSUAL (LAZY LOADING) =============
 function generateMonthGrid() {
@@ -3987,20 +4002,31 @@ window.addDebt = async function () {
 
     // Agregar campos específicos de tarjeta de crédito
     if (type === "Tarjeta de Crédito") {
-      const closingDay = parseInt(document.getElementById("debtClosingDay").value);
-      const paymentDay = parseInt(document.getElementById("debtPaymentDay").value);
+      const closingDayInput = document.getElementById("debtClosingDay");
+      const paymentDayInput = document.getElementById("debtPaymentDay");
       const hasZeroInterest = document.getElementById("debtHasZeroInterest").value === "yes";
       
-      if (closingDay && closingDay >= 1 && closingDay <= 31) {
-        liabilityData.closingDay = closingDay;
+      // Guardar día de cierre si está presente
+      if (closingDayInput && closingDayInput.value) {
+        const closingDay = parseInt(closingDayInput.value);
+        if (!isNaN(closingDay) && closingDay >= 1 && closingDay <= 31) {
+          liabilityData.closingDay = closingDay;
+        }
       }
-      if (paymentDay && paymentDay >= 1 && paymentDay <= 31) {
-        liabilityData.paymentDay = paymentDay;
+      
+      // Guardar día de pago si está presente
+      if (paymentDayInput && paymentDayInput.value) {
+        const paymentDay = parseInt(paymentDayInput.value);
+        if (!isNaN(paymentDay) && paymentDay >= 1 && paymentDay <= 31) {
+          liabilityData.paymentDay = paymentDay;
+        }
       }
+      
+      // Guardar fecha de caducidad de 0% interés si está presente
       if (hasZeroInterest) {
-        const zeroInterestExpiry = document.getElementById("debtZeroInterestExpiry").value;
-        if (zeroInterestExpiry) {
-          liabilityData.zeroInterestExpiry = zeroInterestExpiry;
+        const zeroInterestExpiryInput = document.getElementById("debtZeroInterestExpiry");
+        if (zeroInterestExpiryInput && zeroInterestExpiryInput.value) {
+          liabilityData.zeroInterestExpiry = zeroInterestExpiryInput.value;
         }
       }
     }
@@ -4014,10 +4040,18 @@ window.addDebt = async function () {
     document.getElementById("debtInterest").value = "";
     document.getElementById("debtMinPayment").value = "";
     document.getElementById("debtOwner").value = "Yo";
-    document.getElementById("debtClosingDay").value = "";
-    document.getElementById("debtPaymentDay").value = "";
-    document.getElementById("debtHasZeroInterest").value = "no";
-    document.getElementById("debtZeroInterestExpiry").value = "";
+    if (document.getElementById("debtClosingDay")) {
+      document.getElementById("debtClosingDay").value = "";
+    }
+    if (document.getElementById("debtPaymentDay")) {
+      document.getElementById("debtPaymentDay").value = "";
+    }
+    if (document.getElementById("debtHasZeroInterest")) {
+      document.getElementById("debtHasZeroInterest").value = "no";
+    }
+    if (document.getElementById("debtZeroInterestExpiry")) {
+      document.getElementById("debtZeroInterestExpiry").value = "";
+    }
     toggleCreditCardFields();
     toggleZeroInterestFields();
     
@@ -4071,7 +4105,10 @@ window.updateDebtAmount = async function (id) {
   }
 };
 
-// Registrar pago a una tarjeta/deuda
+// Variable global para almacenar el ID de la deuda actual en el modal de pago
+let currentPaymentDebtId = null;
+
+// Registrar pago a una tarjeta/deuda - Abre modal profesional
 window.registerPayment = async function (debtId) {
   if (!currentUser) {
     showMessage("Debes iniciar sesión", "error");
@@ -4086,24 +4123,53 @@ window.registerPayment = async function (debtId) {
     }
 
     const debt = { id: debtDoc.id, ...debtDoc.data() };
+    currentPaymentDebtId = debtId;
     
-    const paymentAmount = prompt(`Registrar pago para "${debt.name}"\nMonto actual: $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}\n\nIngresa el monto del pago:`, debt.minPayment || 0);
-    if (paymentAmount === null) return;
+    // Llenar el modal con la información
+    document.getElementById("paymentDebtName").textContent = debt.name;
+    document.getElementById("paymentCurrentAmount").textContent = `$${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`;
+    document.getElementById("paymentAmount").value = debt.minPayment || "";
+    document.getElementById("paymentDate").value = new Date().toISOString().split("T")[0];
     
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0) {
-      showMessage("Monto inválido", "error");
+    // Mostrar el modal
+    document.getElementById("paymentModal").classList.add("active");
+    document.getElementById("paymentAmount").focus();
+  } catch (error) {
+    handleError(error, "registerPayment");
+  }
+};
+
+// Confirmar y procesar el pago
+window.confirmPayment = async function () {
+  if (!currentPaymentDebtId || !currentUser) return;
+
+  const amount = parseFloat(document.getElementById("paymentAmount").value);
+  const paymentDate = document.getElementById("paymentDate").value;
+
+  if (!amount || amount <= 0) {
+    showMessage("Por favor ingresa un monto válido", "error");
+    return;
+  }
+
+  if (!paymentDate) {
+    showMessage("Por favor selecciona una fecha", "error");
+    return;
+  }
+
+  try {
+    showLoading("Registrando pago...");
+    
+    const debtDoc = await getDoc(doc(db, "liabilities", currentPaymentDebtId));
+    if (!debtDoc.exists()) {
+      showMessage("Deuda no encontrada", "error");
       return;
     }
 
-    const paymentDate = prompt("Fecha del pago (YYYY-MM-DD):", new Date().toISOString().split("T")[0]);
-    if (paymentDate === null) return;
-
-    showLoading("Registrando pago...");
+    const debt = debtDoc.data();
     
     // Registrar el pago en una subcolección
     const paymentData = {
-      debtId: debtId,
+      debtId: currentPaymentDebtId,
       userId: currentUser.uid,
       amount: amount,
       date: paymentDate,
@@ -4114,19 +4180,28 @@ window.registerPayment = async function (debtId) {
     
     // Actualizar el monto de la deuda
     const newAmount = Math.max(0, debt.amount - amount);
-    await updateDoc(doc(db, "liabilities", debtId), {
+    await updateDoc(doc(db, "liabilities", currentPaymentDebtId), {
       amount: newAmount,
     });
 
     cache.clear("liabilities");
+    closePaymentModal();
     await displayDebts();
     await loadNetworth();
     showMessage(`✅ Pago de $${amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} registrado exitosamente`, "success");
   } catch (error) {
-    handleError(error, "registerPayment");
+    handleError(error, "confirmPayment");
   } finally {
     hideLoading();
   }
+};
+
+// Cerrar modal de pago
+window.closePaymentModal = function () {
+  document.getElementById("paymentModal").classList.remove("active");
+  currentPaymentDebtId = null;
+  document.getElementById("paymentAmount").value = "";
+  document.getElementById("paymentDate").value = "";
 };
 
 // Mostrar historial de pagos
