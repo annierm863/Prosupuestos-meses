@@ -84,10 +84,27 @@ const cache = (function() {
       timestamps[cacheKey] = Date.now();
     },
 
-    clear(key = null) {
+    clear(key = null, subKey = null) {
       if (key) {
-        data[key] = typeof data[key] === "object" && !Array.isArray(data[key]) ? {} : null;
-        timestamps[key] = null;
+        if (subKey) {
+          // Limpiar un sub-caché específico
+          const cacheKey = `${key}_${subKey}`;
+          delete data[cacheKey];
+          delete timestamps[cacheKey];
+        } else {
+          // Limpiar todo el caché de una clave
+          if (typeof data[key] === "object" && !Array.isArray(data[key]) && data[key] !== null) {
+            // Si es un objeto, limpiar todas las sub-claves
+            Object.keys(data).forEach((k) => {
+              if (k.startsWith(key + "_")) {
+                delete data[k];
+                delete timestamps[k];
+              }
+            });
+          }
+          data[key] = typeof data[key] === "object" && !Array.isArray(data[key]) ? {} : null;
+          timestamps[key] = null;
+        }
       } else {
         // Limpiar todo el caché
         Object.keys(data).forEach((k) => {
@@ -1193,12 +1210,20 @@ window.addWorkExpense = async function () {
       showMessage("✅ Gasto de trabajo registrado", "success");
     }
 
+    // Limpiar caché antes de recargar
     cache.clear("workExpenses", currentWeek.id);
     document.getElementById("workAmount").value = "";
     document.getElementById("workDescription").value = "";
 
+    // Recargar gastos y actualizar dashboard
     await loadWorkExpenses();
     await updateDashboard();
+    
+    // Forzar actualización del análisis
+    if (currentWeek) {
+      const workExpenses = await getWeekData("workExpenses", currentWeek.id);
+      await updateWorkAnalysis(workExpenses);
+    }
   } catch (error) {
     showMessage("Error al guardar gasto de trabajo: " + error.message, "error");
     console.error("Error en addWorkExpense:", error);
@@ -1209,13 +1234,6 @@ window.addWorkExpense = async function () {
 
 async function loadWorkExpenses() {
   if (!currentWeek) return;
-
-  // Verificar caché
-  const cached = cache.get("workExpenses", currentWeek.id);
-  if (cached) {
-    displayWorkExpenses(cached);
-    return;
-  }
 
   try {
     const q = query(
@@ -1232,6 +1250,8 @@ async function loadWorkExpenses() {
 
     expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
     cache.set("workExpenses", expenses, currentWeek.id);
+    
+    console.log("Gastos de trabajo cargados:", expenses.length, expenses);
     displayWorkExpenses(expenses);
   } catch (error) {
     showMessage("Error al cargar gastos de trabajo: " + error.message, "error");
@@ -1254,17 +1274,15 @@ function getWorkTypeEmoji(type) {
 function displayWorkExpenses(expenses) {
   const container = document.getElementById("workList");
 
-  if (expenses.length === 0) {
+  if (!expenses || expenses.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">🚗</div>
         <p>No hay gastos de trabajo registrados</p>
       </div>
     `;
-    // Limpiar análisis si no hay datos
-    if (document.getElementById("workWeeklySummary")) {
-      document.getElementById("workWeeklySummary").innerHTML = "";
-    }
+    // Actualizar análisis incluso si no hay datos
+    updateWorkAnalysis([]);
     return;
   }
 
@@ -1275,7 +1293,7 @@ function displayWorkExpenses(expenses) {
         <div class="list-item-info">
           <div class="list-item-title">${getWorkTypeEmoji(expense.type)} ${expense.type}</div>
           <div class="list-item-details">
-            ${expense.description} • 📅 ${formatDate(expense.date)}
+            ${expense.description || ""} • 📅 ${formatDate(expense.date)}
           </div>
         </div>
         <div class="list-item-amount">$${expense.amount.toFixed(2)}</div>
@@ -1322,6 +1340,13 @@ window.deleteWorkExpense = async function (id) {
     cache.clear("workExpenses", currentWeek.id);
     await loadWorkExpenses();
     await updateDashboard();
+    
+    // Forzar actualización del análisis después de eliminar
+    if (currentWeek) {
+      const workExpenses = await getWeekData("workExpenses", currentWeek.id);
+      await updateWorkAnalysis(workExpenses);
+    }
+    
     showMessage("✅ Gasto de trabajo eliminado", "success");
   } catch (error) {
     showMessage("Error al eliminar gasto de trabajo: " + error.message, "error");
