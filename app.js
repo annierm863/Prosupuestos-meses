@@ -1830,27 +1830,28 @@ async function loadMonthlyData(month, year) {
       const startDate = new Date(weekData.startDate);
       const endDate = new Date(weekData.endDate);
       
-      // Una semana pertenece a un mes si:
-      // 1. La fecha de inicio está en ese mes, O
-      // 2. La fecha de fin está en ese mes, O
-      // 3. El mes está completamente dentro del rango de la semana
-      const startMonth = startDate.getMonth();
-      const startYear = startDate.getFullYear();
-      const endMonth = endDate.getMonth();
-      const endYear = endDate.getFullYear();
-      
-      // Verificar si el mes seleccionado está dentro del rango de la semana
-      const targetDate = new Date(year, month, 1);
+      // Calcular cuántos días de la semana están en el mes seleccionado
       const targetMonthStart = new Date(year, month, 1);
       const targetMonthEnd = new Date(year, month + 1, 0, 23, 59, 59);
       
-      // La semana pertenece al mes si hay intersección entre el rango de la semana y el mes
-      const weekInMonth = (startMonth === month && startYear === year) ||
-                          (endMonth === month && endYear === year) ||
-                          (startDate <= targetMonthEnd && endDate >= targetMonthStart);
+      // Calcular el rango de intersección
+      const intersectionStart = startDate > targetMonthStart ? startDate : targetMonthStart;
+      const intersectionEnd = endDate < targetMonthEnd ? endDate : targetMonthEnd;
       
-      if (weekInMonth) {
-        allWeeks.push(weekData);
+      // Si hay intersección, calcular cuántos días están en este mes
+      if (intersectionStart <= intersectionEnd) {
+        const daysInMonth = Math.ceil((intersectionEnd - intersectionStart) / (1000 * 60 * 60 * 24)) + 1;
+        const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+        
+        // La semana pertenece a este mes si tiene más de la mitad de sus días aquí
+        // O si comienza en este mes (prioridad)
+        const startMonth = startDate.getMonth();
+        const startYear = startDate.getFullYear();
+        const belongsToMonth = (startMonth === month && startYear === year) || (daysInMonth > totalDays / 2);
+        
+        if (belongsToMonth) {
+          allWeeks.push(weekData);
+        }
       }
     });
 
@@ -2226,22 +2227,28 @@ async function getMonthWeeks() {
       const startDate = new Date(weekData.startDate);
       const endDate = new Date(weekData.endDate);
       
-      // Una semana pertenece a un mes si hay intersección entre el rango de la semana y el mes
-      const startMonth = startDate.getMonth();
-      const startYear = startDate.getFullYear();
-      const endMonth = endDate.getMonth();
-      const endYear = endDate.getFullYear();
-      
+      // Calcular cuántos días de la semana están en el mes seleccionado
       const targetMonthStart = new Date(selectedMonth.year, selectedMonth.month, 1);
       const targetMonthEnd = new Date(selectedMonth.year, selectedMonth.month + 1, 0, 23, 59, 59);
       
-      // La semana pertenece al mes si hay intersección
-      const weekInMonth = (startMonth === selectedMonth.month && startYear === selectedMonth.year) ||
-                          (endMonth === selectedMonth.month && endYear === selectedMonth.year) ||
-                          (startDate <= targetMonthEnd && endDate >= targetMonthStart);
+      // Calcular el rango de intersección
+      const intersectionStart = startDate > targetMonthStart ? startDate : targetMonthStart;
+      const intersectionEnd = endDate < targetMonthEnd ? endDate : targetMonthEnd;
       
-      if (weekInMonth) {
-        weeks.push(weekData);
+      // Si hay intersección, calcular cuántos días están en este mes
+      if (intersectionStart <= intersectionEnd) {
+        const daysInMonth = Math.ceil((intersectionEnd - intersectionStart) / (1000 * 60 * 60 * 24)) + 1;
+        const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+        
+        // La semana pertenece a este mes si tiene más de la mitad de sus días aquí
+        // O si comienza en este mes (prioridad)
+        const startMonth = startDate.getMonth();
+        const startYear = startDate.getFullYear();
+        const belongsToMonth = (startMonth === selectedMonth.month && startYear === selectedMonth.year) || (daysInMonth > totalDays / 2);
+        
+        if (belongsToMonth) {
+          weeks.push(weekData);
+        }
       }
     });
 
