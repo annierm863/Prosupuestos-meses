@@ -1827,10 +1827,29 @@ async function loadMonthlyData(month, year) {
 
     snapshot.forEach((doc) => {
       const weekData = { id: doc.id, ...doc.data() };
-      const weekMonth = new Date(weekData.startDate).getMonth();
-      const weekYear = new Date(weekData.startDate).getFullYear();
-
-      if (weekMonth === month && weekYear === year) {
+      const startDate = new Date(weekData.startDate);
+      const endDate = new Date(weekData.endDate);
+      
+      // Una semana pertenece a un mes si:
+      // 1. La fecha de inicio está en ese mes, O
+      // 2. La fecha de fin está en ese mes, O
+      // 3. El mes está completamente dentro del rango de la semana
+      const startMonth = startDate.getMonth();
+      const startYear = startDate.getFullYear();
+      const endMonth = endDate.getMonth();
+      const endYear = endDate.getFullYear();
+      
+      // Verificar si el mes seleccionado está dentro del rango de la semana
+      const targetDate = new Date(year, month, 1);
+      const targetMonthStart = new Date(year, month, 1);
+      const targetMonthEnd = new Date(year, month + 1, 0, 23, 59, 59);
+      
+      // La semana pertenece al mes si hay intersección entre el rango de la semana y el mes
+      const weekInMonth = (startMonth === month && startYear === year) ||
+                          (endMonth === month && endYear === year) ||
+                          (startDate <= targetMonthEnd && endDate >= targetMonthStart);
+      
+      if (weekInMonth) {
         allWeeks.push(weekData);
       }
     });
@@ -2202,15 +2221,29 @@ async function getMonthWeeks() {
   const snapshot = await getDocs(q);
   const weeks = [];
 
-  snapshot.forEach((doc) => {
-    const weekData = { id: doc.id, ...doc.data() };
-    const weekMonth = new Date(weekData.startDate).getMonth();
-    const weekYear = new Date(weekData.startDate).getFullYear();
-
-    if (weekMonth === selectedMonth.month && weekYear === selectedMonth.year) {
-      weeks.push(weekData);
-    }
-  });
+    snapshot.forEach((doc) => {
+      const weekData = { id: doc.id, ...doc.data() };
+      const startDate = new Date(weekData.startDate);
+      const endDate = new Date(weekData.endDate);
+      
+      // Una semana pertenece a un mes si hay intersección entre el rango de la semana y el mes
+      const startMonth = startDate.getMonth();
+      const startYear = startDate.getFullYear();
+      const endMonth = endDate.getMonth();
+      const endYear = endDate.getFullYear();
+      
+      const targetMonthStart = new Date(selectedMonth.year, selectedMonth.month, 1);
+      const targetMonthEnd = new Date(selectedMonth.year, selectedMonth.month + 1, 0, 23, 59, 59);
+      
+      // La semana pertenece al mes si hay intersección
+      const weekInMonth = (startMonth === selectedMonth.month && startYear === selectedMonth.year) ||
+                          (endMonth === selectedMonth.month && endYear === selectedMonth.year) ||
+                          (startDate <= targetMonthEnd && endDate >= targetMonthStart);
+      
+      if (weekInMonth) {
+        weeks.push(weekData);
+      }
+    });
 
   return weeks.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
 }

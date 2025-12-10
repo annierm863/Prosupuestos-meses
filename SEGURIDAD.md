@@ -184,3 +184,4 @@ Si detectas algún problema de seguridad, contacta inmediatamente al administrad
 **Última actualización**: $(Get-Date -Format "yyyy-MM-dd")
 **Versión**: 1.0
 
+

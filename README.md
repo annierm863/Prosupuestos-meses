@@ -27,3 +27,4 @@ Si ves errores 404:
 3. Asegúrate de que las rutas en el HTML sean correctas
 
 
+
