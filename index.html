@@ -895,7 +895,16 @@
             </div>
             <div class="form-group">
               <label>Nombre/Descripción:</label>
-              <input type="text" id="debtName" placeholder="Ej: Tarjeta Visa, Préstamo Banco X" />
+              <input type="text" id="debtName" placeholder="Ej: Bank of America, Citi Bank, Tarjeta Visa" />
+            </div>
+            <div class="form-group">
+              <label>Propietario:</label>
+              <select id="debtOwner">
+                <option value="Yo">👤 Yo</option>
+                <option value="Esposa">👩 Esposa</option>
+                <option value="Ambos">👥 Ambos</option>
+              </select>
+              <small style="color: #666;">Selecciona quién es responsable de esta deuda</small>
             </div>
             <div class="form-group">
               <label>Monto Total de la Deuda:</label>

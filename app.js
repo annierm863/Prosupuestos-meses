@@ -3964,6 +3964,7 @@ window.addDebt = async function () {
   const amount = parseFloat(document.getElementById("debtAmount").value);
   const interest = parseFloat(document.getElementById("debtInterest").value) || 0;
   const minPayment = parseFloat(document.getElementById("debtMinPayment").value) || 0;
+  const owner = document.getElementById("debtOwner").value || "Yo";
 
   if (!name || !amount || amount <= 0) {
     showMessage("Por favor completa todos los campos correctamente", "error");
@@ -3980,6 +3981,7 @@ window.addDebt = async function () {
       originalAmount: amount, // Guardar el monto original para calcular progreso
       interest,
       minPayment,
+      owner: owner, // Propietario de la deuda
       createdAt: Timestamp.now(),
     };
 
@@ -4011,6 +4013,7 @@ window.addDebt = async function () {
     document.getElementById("debtAmount").value = "";
     document.getElementById("debtInterest").value = "";
     document.getElementById("debtMinPayment").value = "";
+    document.getElementById("debtOwner").value = "Yo";
     document.getElementById("debtClosingDay").value = "";
     document.getElementById("debtPaymentDay").value = "";
     document.getElementById("debtHasZeroInterest").value = "no";
@@ -4259,7 +4262,13 @@ async function displayDebts() {
   if (!currentUser) return;
   try {
     showLoading("Cargando deudas...");
-    const debts = await loadDebts();
+    let debts = await loadDebts();
+    
+    // Aplicar filtro por propietario
+    const ownerFilter = document.getElementById("debtOwnerFilter")?.value || "all";
+    if (ownerFilter !== "all") {
+      debts = debts.filter(d => (d.owner || "Yo") === ownerFilter);
+    }
 
     const totalDebt = debts.reduce((sum, d) => sum + (d.amount || 0), 0);
     const totalMinPayments = debts.reduce((sum, d) => sum + (d.minPayment || 0), 0);
@@ -4345,8 +4354,11 @@ async function displayDebts() {
             }
           }
           
+          // Obtener icono de propietario
+          const ownerIcon = debt.owner === "Yo" ? "👤" : debt.owner === "Esposa" ? "👩" : "👥";
+          
           return `
-      <div class="card" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid #ef4444;">
+      <div class="card" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid #ef4444; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onclick="showDebtDetails('${debt.id}')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
         ${alerts.length > 0 ? `
         <div style="margin-bottom: 15px;">
           ${alerts.map(alert => `
@@ -4360,7 +4372,10 @@ async function displayDebts() {
         ` : ''}
         <div style="display: flex; justify-content: space-between; align-items: start;">
           <div style="flex: 1;">
-            <h4 style="color: #333; margin-bottom: 10px;">${debt.name}</h4>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <h4 style="color: #333; margin: 0;">${debt.name}</h4>
+              <span style="background: #e0e7ff; color: #4338ca; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${ownerIcon} ${debt.owner || "Yo"}</span>
+            </div>
             <p style="color: #666; margin: 5px 0;"><strong>Tipo:</strong> ${debt.type}</p>
             <p style="color: #666; margin: 5px 0;"><strong>Monto Actual:</strong> <span style="color: #ef4444; font-weight: bold;">$${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</span></p>
             ${debt.originalAmount ? `<p style="color: #666; margin: 5px 0;"><strong>Monto Original:</strong> $${debt.originalAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>` : ''}
@@ -4384,10 +4399,11 @@ async function displayDebts() {
             ` : ''}
           </div>
           <div style="display: flex; flex-direction: column; gap: 5px; margin-left: 15px;">
-            <button onclick="registerPayment('${debt.id}')" style="background: #10b981; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">💰 Registrar Pago</button>
-            <button onclick="showPaymentHistory('${debt.id}')" style="background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">📋 Historial</button>
-            <button onclick="updateDebtAmount('${debt.id}')" style="background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">✏️ Actualizar</button>
-            <button onclick="deleteLiability('${debt.id}')" style="background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">🗑️ Eliminar</button>
+            <button onclick="event.stopPropagation(); showDebtDetails('${debt.id}')" style="background: #8b5cf6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">👁️ Ver Detalles</button>
+            <button onclick="event.stopPropagation(); registerPayment('${debt.id}')" style="background: #10b981; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">💰 Registrar Pago</button>
+            <button onclick="event.stopPropagation(); showPaymentHistory('${debt.id}')" style="background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">📋 Historial</button>
+            <button onclick="event.stopPropagation(); updateDebtAmount('${debt.id}')" style="background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">✏️ Actualizar</button>
+            <button onclick="event.stopPropagation(); deleteLiability('${debt.id}')" style="background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">🗑️ Eliminar</button>
           </div>
         </div>
       </div>
