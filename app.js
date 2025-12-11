@@ -4388,7 +4388,7 @@ async function loadDebts() {
   return liabilities.filter((l) => l.amount > 0);
 }
 
-// Mostrar detalles de una deuda específica
+// Mostrar detalles de una deuda específica - DEBE estar definida antes de displayDebts
 window.showDebtDetails = async function (debtId) {
   if (!currentUser || !debtId) return;
   
@@ -4648,7 +4648,7 @@ async function displayDebts() {
                                  debt.zeroInterestExpiry !== undefined;
           
           return `
-      <div class="card" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid #ef4444; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onclick="showDebtDetails('${debt.id}')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+      <div class="card" data-debt-card-id="${debt.id}" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid #ef4444; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
         ${alerts.length > 0 ? `
         <div style="margin-bottom: 15px;">
           ${alerts.map(alert => `
@@ -4689,11 +4689,11 @@ async function displayDebts() {
             ` : ''}
           </div>
           <div style="display: flex; flex-direction: column; gap: 5px; margin-left: 15px;">
-            <button onclick="event.stopPropagation(); showDebtDetails('${debt.id}')" style="background: #8b5cf6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">👁️ Ver Detalles</button>
-            <button onclick="event.stopPropagation(); registerPayment('${debt.id}')" style="background: #10b981; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">💰 Registrar Pago</button>
-            <button onclick="event.stopPropagation(); showPaymentHistory('${debt.id}')" style="background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">📋 Historial</button>
-            <button onclick="event.stopPropagation(); updateDebtAmount('${debt.id}')" style="background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">✏️ Actualizar</button>
-            <button onclick="event.stopPropagation(); deleteLiability('${debt.id}')" style="background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">🗑️ Eliminar</button>
+            <button data-debt-id="${debt.id}" data-action="showDetails" style="background: #8b5cf6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">👁️ Ver Detalles</button>
+            <button data-debt-id="${debt.id}" data-action="registerPayment" style="background: #10b981; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">💰 Registrar Pago</button>
+            <button data-debt-id="${debt.id}" data-action="showHistory" style="background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">📋 Historial</button>
+            <button data-debt-id="${debt.id}" data-action="update" style="background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">✏️ Actualizar</button>
+            <button data-debt-id="${debt.id}" data-action="delete" style="background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">🗑️ Eliminar</button>
           </div>
         </div>
       </div>
@@ -4709,6 +4709,50 @@ async function displayDebts() {
     `;
 
     document.getElementById("debtsList").innerHTML = debtsHTML;
+    
+    // Agregar event listeners a los botones después de generar el HTML
+    // Esto asegura que las funciones estén disponibles
+    document.querySelectorAll('[data-debt-id]').forEach(button => {
+      const debtId = button.getAttribute('data-debt-id');
+      const action = button.getAttribute('data-action');
+      
+      if (action === 'showDetails' && typeof window.showDebtDetails === 'function') {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.showDebtDetails(debtId);
+        });
+      } else if (action === 'registerPayment' && typeof window.registerPayment === 'function') {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.registerPayment(debtId);
+        });
+      } else if (action === 'showHistory' && typeof window.showPaymentHistory === 'function') {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.showPaymentHistory(debtId);
+        });
+      } else if (action === 'update' && typeof window.updateDebtAmount === 'function') {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.updateDebtAmount(debtId);
+        });
+      } else if (action === 'delete' && typeof window.deleteLiability === 'function') {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.deleteLiability(debtId);
+        });
+      }
+    });
+    
+    // También agregar listener al card completo para mostrar detalles
+    document.querySelectorAll('[data-debt-card-id]').forEach(card => {
+      const debtId = card.getAttribute('data-debt-card-id');
+      if (typeof window.showDebtDetails === 'function') {
+        card.addEventListener('click', () => {
+          window.showDebtDetails(debtId);
+        });
+      }
+    });
 
     updateDebtStrategy();
   } catch (error) {
