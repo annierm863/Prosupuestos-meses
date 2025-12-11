@@ -2817,11 +2817,36 @@ window.showSubTab = function (subTabName, element = null) {
 
 // ============= UTILIDADES =============
 function formatDate(dateString) {
-  const date = new Date(dateString + "T00:00:00");
-  const day = date.getDate().toString().padStart(2, "0");
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
+  if (!dateString) return '';
+  try {
+    // Si ya es una fecha formateada, retornarla
+    if (typeof dateString === 'string' && dateString.includes('/')) {
+      return dateString;
+    }
+    // Si es un Timestamp de Firestore, convertirlo
+    let date;
+    if (dateString.toDate) {
+      date = dateString.toDate();
+    } else {
+      // Intentar parsear como string de fecha
+      date = new Date(dateString);
+      // Si el formato es YYYY-MM-DD, agregar la hora
+      if (dateString.includes('-') && !dateString.includes('T')) {
+        date = new Date(dateString + "T00:00:00");
+      }
+    }
+    // Validar que la fecha sea válida
+    if (isNaN(date.getTime())) {
+      return dateString; // Retornar el string original si no se puede parsear
+    }
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch (error) {
+    console.error("Error formateando fecha:", error, dateString);
+    return dateString; // Retornar el string original en caso de error
+  }
 }
 
 function getCategoryEmoji(category) {
@@ -3593,7 +3618,23 @@ async function loadLiabilities() {
     const snapshot = await getDocs(q);
     const liabilities = [];
     snapshot.forEach((doc) => {
-      liabilities.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      // Convertir campos de fecha si son Timestamps de Firestore
+      if (data.zeroInterestExpiry) {
+        // Si es un Timestamp de Firestore, convertirlo a string
+        if (data.zeroInterestExpiry.toDate) {
+          const date = data.zeroInterestExpiry.toDate();
+          data.zeroInterestExpiry = date.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+        }
+      }
+      // Asegurar que closingDay y paymentDay sean números
+      if (data.closingDay !== undefined) {
+        data.closingDay = parseInt(data.closingDay) || null;
+      }
+      if (data.paymentDay !== undefined) {
+        data.paymentDay = parseInt(data.paymentDay) || null;
+      }
+      liabilities.push({ id: doc.id, ...data });
     });
     liabilities.sort((a, b) => new Date(b.createdAt?.toDate() || 0) - new Date(a.createdAt?.toDate() || 0));
     cache.set("liabilities", liabilities);
@@ -4457,9 +4498,9 @@ async function displayDebts() {
             <p style="color: #666; margin: 5px 0;"><strong>Interés:</strong> ${debt.interest || 0}% anual</p>
             <p style="color: #666; margin: 5px 0;"><strong>Pago Mínimo:</strong> $${(debt.minPayment || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })}/mes</p>
             
-            ${debt.closingDay ? `<p style="color: #666; margin: 5px 0;"><strong>📅 Cierre de Ciclo:</strong> Día ${debt.closingDay} de cada mes</p>` : ''}
-            ${debt.paymentDay ? `<p style="color: #666; margin: 5px 0;"><strong>💳 Fecha de Pago:</strong> Día ${debt.paymentDay} de cada mes</p>` : ''}
-            ${debt.zeroInterestExpiry ? `<p style="color: #666; margin: 5px 0;"><strong>⏰ 0% Interés hasta:</strong> ${formatDate(debt.zeroInterestExpiry)}</p>` : ''}
+            ${(debt.closingDay !== undefined && debt.closingDay !== null && debt.closingDay !== '') ? `<p style="color: #666; margin: 5px 0;"><strong>📅 Cierre de Ciclo:</strong> Día ${debt.closingDay} de cada mes</p>` : ''}
+            ${(debt.paymentDay !== undefined && debt.paymentDay !== null && debt.paymentDay !== '') ? `<p style="color: #666; margin: 5px 0;"><strong>💳 Fecha de Pago:</strong> Día ${debt.paymentDay} de cada mes</p>` : ''}
+            ${(debt.zeroInterestExpiry !== undefined && debt.zeroInterestExpiry !== null && debt.zeroInterestExpiry !== '') ? `<p style="color: #666; margin: 5px 0;"><strong>⏰ 0% Interés hasta:</strong> ${formatDate(debt.zeroInterestExpiry)}</p>` : ''}
             
             ${debt.originalAmount ? `
             <div style="margin-top: 15px;">
