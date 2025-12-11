@@ -1155,6 +1155,31 @@
       </div>
     </div>
 
+    <!-- Modal para actualizar monto de deuda -->
+    <div id="updateDebtModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3 id="updateDebtModalTitle">✏️ Actualizar Monto de Deuda</h3>
+          <button class="close-modal" onclick="closeUpdateDebtModal()">×</button>
+        </div>
+        <div id="updateDebtModalBody" style="padding: 20px;">
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <p style="color: #666; margin: 0; font-size: 14px;"><strong>Deuda:</strong> <span id="updateDebtName" style="color: #333; font-weight: 600;"></span></p>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;"><strong>Monto Anterior:</strong> <span id="updateDebtPreviousAmount" style="color: #ef4444; font-weight: bold; font-size: 18px;"></span></p>
+          </div>
+          <div class="form-group">
+            <label>Nuevo Monto:</label>
+            <input type="number" id="updateDebtAmount" placeholder="0.00" step="0.01" min="0" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;" />
+            <small style="color: #666;">Ingresa el nuevo monto de la deuda</small>
+          </div>
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="closeUpdateDebtModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancelar</button>
+            <button onclick="confirmUpdateDebt()" style="flex: 1; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Actualizar Monto</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="./app.js"></script>
   </body>
 </html>

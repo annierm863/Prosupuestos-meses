@@ -1763,6 +1763,13 @@ document.getElementById("paymentModal")?.addEventListener("click", function (e) 
   }
 });
 
+// Cerrar modal de actualización al hacer clic fuera
+document.getElementById("updateDebtModal")?.addEventListener("click", function (e) {
+  if (e.target === this) {
+    closeUpdateDebtModal();
+  }
+});
+
 // ============= RESUMEN MENSUAL (LAZY LOADING) =============
 function generateMonthGrid() {
   const months = [
@@ -4119,6 +4126,7 @@ window.addDebt = async function () {
   }
 };
 
+// Abrir modal para actualizar monto de deuda
 window.updateDebtAmount = async function (id) {
   if (!currentUser) {
     showMessage("Debes iniciar sesión", "error");
@@ -4134,34 +4142,71 @@ window.updateDebtAmount = async function (id) {
     }
 
     const debt = { id: debtDoc.id, ...debtDoc.data() };
-
-    const newAmount = prompt(`Monto actual de la deuda "${debt.name}":\n(Monto anterior: $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })})`, debt.amount);
-    if (newAmount === null) return;
+    currentUpdateDebtId = id;
     
-    const amountValue = parseFloat(newAmount);
-    if (isNaN(amountValue) || amountValue < 0) {
-      showMessage("Monto inválido", "error");
+    // Llenar el modal con la información
+    document.getElementById("updateDebtName").textContent = debt.name;
+    document.getElementById("updateDebtPreviousAmount").textContent = `$${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`;
+    document.getElementById("updateDebtAmount").value = debt.amount || "";
+    
+    // Mostrar el modal
+    document.getElementById("updateDebtModal").classList.add("active");
+    document.getElementById("updateDebtAmount").focus();
+    document.getElementById("updateDebtAmount").select();
+  } catch (error) {
+    handleError(error, "updateDebtAmount");
+  }
+};
+
+// Confirmar y procesar la actualización del monto
+window.confirmUpdateDebt = async function () {
+  if (!currentUpdateDebtId || !currentUser) return;
+
+  const newAmount = parseFloat(document.getElementById("updateDebtAmount").value);
+
+  if (!newAmount || isNaN(newAmount) || newAmount < 0) {
+    showMessage("Por favor ingresa un monto válido", "error");
+    return;
+  }
+
+  try {
+    showLoading("Actualizando deuda...");
+    
+    const debtDoc = await getDoc(doc(db, "liabilities", currentUpdateDebtId));
+    if (!debtDoc.exists()) {
+      showMessage("Deuda no encontrada", "error");
       return;
     }
 
-    showLoading("Actualizando deuda...");
-    await updateDoc(doc(db, "liabilities", id), {
-      amount: amountValue,
+    await updateDoc(doc(db, "liabilities", currentUpdateDebtId), {
+      amount: newAmount,
     });
 
     cache.clear("liabilities");
+    closeUpdateDebtModal();
     await displayDebts();
     await loadNetworth(); // Actualizar también la sección de patrimonio neto
-    showMessage("✅ Deuda actualizada", "success");
+    showMessage(`✅ Deuda actualizada a $${newAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`, "success");
   } catch (error) {
-    handleError(error, "updateDebtAmount");
+    handleError(error, "confirmUpdateDebt");
+    showMessage("Error al actualizar la deuda: " + error.message, "error");
   } finally {
     hideLoading();
   }
 };
 
+// Cerrar modal de actualización
+window.closeUpdateDebtModal = function () {
+  document.getElementById("updateDebtModal").classList.remove("active");
+  currentUpdateDebtId = null;
+  document.getElementById("updateDebtAmount").value = "";
+};
+
 // Variable global para almacenar el ID de la deuda actual en el modal de pago
 let currentPaymentDebtId = null;
+
+// Variable global para almacenar el ID de la deuda actual en el modal de actualización
+let currentUpdateDebtId = null;
 
 // Registrar pago a una tarjeta/deuda - Abre modal profesional
 window.registerPayment = async function (debtId) {
