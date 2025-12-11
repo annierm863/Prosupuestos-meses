@@ -4031,6 +4031,24 @@ window.toggleZeroInterestFields = function () {
   }
 };
 
+// Toggle campos de tarjeta de crédito en el modal de actualización
+window.toggleUpdateCreditCardFields = function () {
+  const type = document.getElementById("updateDebtType")?.value;
+  const creditCardFields = document.getElementById("updateCreditCardFields");
+  if (creditCardFields) {
+    creditCardFields.style.display = type === "Tarjeta de Crédito" ? "block" : "none";
+  }
+};
+
+// Toggle campos de 0% interés en el modal de actualización
+window.toggleUpdateZeroInterestFields = function () {
+  const hasZeroInterest = document.getElementById("updateDebtHasZeroInterest")?.value;
+  const zeroInterestFields = document.getElementById("updateZeroInterestFields");
+  if (zeroInterestFields) {
+    zeroInterestFields.style.display = hasZeroInterest === "yes" ? "block" : "none";
+  }
+};
+
 window.addDebt = async function () {
   if (!currentUser) {
     showMessage("Debes iniciar sesión", "error");
@@ -4164,15 +4182,50 @@ window.updateDebtAmount = async function (id) {
 
     currentUpdateDebtId = id;
     
-    // Llenar el modal con la información
-    document.getElementById("updateDebtName").textContent = debt.name;
-    document.getElementById("updateDebtPreviousAmount").textContent = `$${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`;
+    // Llenar el modal con toda la información de la deuda
+    document.getElementById("updateDebtType").value = debt.type || "Tarjeta de Crédito";
+    document.getElementById("updateDebtName").value = debt.name || "";
+    document.getElementById("updateDebtOwner").value = debt.owner || "Yo";
     document.getElementById("updateDebtAmount").value = debt.amount || "";
+    document.getElementById("updateDebtInterest").value = debt.interest || "";
+    document.getElementById("updateDebtMinPayment").value = debt.minPayment || "";
+    
+    // Campos de tarjeta de crédito
+    if (debt.type === "Tarjeta de Crédito") {
+      document.getElementById("updateCreditCardFields").style.display = "block";
+      document.getElementById("updateDebtClosingDay").value = debt.closingDay || "";
+      document.getElementById("updateDebtPaymentDay").value = debt.paymentDay || "";
+      
+      const hasZeroInterest = debt.zeroInterestExpiry ? "yes" : "no";
+      document.getElementById("updateDebtHasZeroInterest").value = hasZeroInterest;
+      
+      if (hasZeroInterest === "yes") {
+        document.getElementById("updateZeroInterestFields").style.display = "block";
+        if (debt.zeroInterestExpiry) {
+          // Convertir fecha si es necesario
+          let expiryDate = debt.zeroInterestExpiry;
+          if (expiryDate.toDate && typeof expiryDate.toDate === 'function') {
+            expiryDate = expiryDate.toDate().toISOString().split('T')[0];
+          } else if (typeof expiryDate === 'string' && expiryDate.includes('/')) {
+            // Convertir formato DD/MM/YYYY a YYYY-MM-DD
+            const parts = expiryDate.split('/');
+            if (parts.length === 3) {
+              expiryDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+          }
+          document.getElementById("updateDebtZeroInterestExpiry").value = expiryDate;
+        }
+      } else {
+        document.getElementById("updateZeroInterestFields").style.display = "none";
+        document.getElementById("updateDebtZeroInterestExpiry").value = "";
+      }
+    } else {
+      document.getElementById("updateCreditCardFields").style.display = "none";
+    }
     
     // Mostrar el modal
     document.getElementById("updateDebtModal").classList.add("active");
-    document.getElementById("updateDebtAmount").focus();
-    document.getElementById("updateDebtAmount").select();
+    document.getElementById("updateDebtName").focus();
   } catch (error) {
     console.error("Error en updateDebtAmount:", error);
     handleError(error, "updateDebtAmount");
@@ -4180,13 +4233,25 @@ window.updateDebtAmount = async function (id) {
   }
 };
 
-// Confirmar y procesar la actualización del monto
+// Confirmar y procesar la actualización completa de la deuda
 window.confirmUpdateDebt = async function () {
   if (!currentUpdateDebtId || !currentUser) return;
 
-  const newAmount = parseFloat(document.getElementById("updateDebtAmount").value);
+  // Obtener todos los valores del formulario
+  const type = document.getElementById("updateDebtType").value;
+  const name = document.getElementById("updateDebtName").value;
+  const owner = document.getElementById("updateDebtOwner").value || "Yo";
+  const amount = parseFloat(document.getElementById("updateDebtAmount").value);
+  const interest = parseFloat(document.getElementById("updateDebtInterest").value) || 0;
+  const minPayment = parseFloat(document.getElementById("updateDebtMinPayment").value) || 0;
 
-  if (!newAmount || isNaN(newAmount) || newAmount < 0) {
+  // Validaciones
+  if (!name || name.trim() === "") {
+    showMessage("Por favor ingresa el nombre de la deuda", "error");
+    return;
+  }
+
+  if (!amount || isNaN(amount) || amount < 0) {
     showMessage("Por favor ingresa un monto válido", "error");
     return;
   }
@@ -4195,17 +4260,15 @@ window.confirmUpdateDebt = async function () {
     showLoading("Actualizando deuda...");
     
     // Verificar que la deuda existe antes de actualizar
-    // Usar getDoc con manejo de errores offline
     let debtExists = true;
     try {
       const debtDoc = await getDoc(doc(db, "liabilities", currentUpdateDebtId));
       debtExists = debtDoc.exists();
     } catch (firebaseError) {
       // Si hay error de conexión, intentar actualizar de todas formas
-      // Firebase puede tener persistencia local y sincronizar después
       if (firebaseError.code === 'unavailable' || firebaseError.message?.includes('offline')) {
         console.warn("Cliente offline, intentando actualizar con persistencia local");
-        debtExists = true; // Asumir que existe si está en caché
+        debtExists = true;
       } else {
         throw firebaseError;
       }
@@ -4217,15 +4280,71 @@ window.confirmUpdateDebt = async function () {
       return;
     }
 
-    await updateDoc(doc(db, "liabilities", currentUpdateDebtId), {
-      amount: newAmount,
-    });
+    // Preparar datos de actualización
+    const updateData = {
+      type,
+      name: name.trim(),
+      owner,
+      amount,
+      interest,
+      minPayment,
+    };
+
+    // Agregar campos específicos de tarjeta de crédito si aplica
+    if (type === "Tarjeta de Crédito") {
+      const closingDayInput = document.getElementById("updateDebtClosingDay");
+      const paymentDayInput = document.getElementById("updateDebtPaymentDay");
+      const hasZeroInterest = document.getElementById("updateDebtHasZeroInterest").value === "yes";
+      
+      // Día de cierre
+      if (closingDayInput && closingDayInput.value && closingDayInput.value.trim() !== '') {
+        const closingDay = parseInt(closingDayInput.value.trim());
+        if (!isNaN(closingDay) && closingDay >= 1 && closingDay <= 31) {
+          updateData.closingDay = closingDay;
+        } else {
+          updateData.closingDay = null;
+        }
+      } else {
+        updateData.closingDay = null;
+      }
+      
+      // Día de pago
+      if (paymentDayInput && paymentDayInput.value && paymentDayInput.value.trim() !== '') {
+        const paymentDay = parseInt(paymentDayInput.value.trim());
+        if (!isNaN(paymentDay) && paymentDay >= 1 && paymentDay <= 31) {
+          updateData.paymentDay = paymentDay;
+        } else {
+          updateData.paymentDay = null;
+        }
+      } else {
+        updateData.paymentDay = null;
+      }
+      
+      // Fecha de caducidad de 0% interés
+      if (hasZeroInterest) {
+        const zeroInterestExpiryInput = document.getElementById("updateDebtZeroInterestExpiry");
+        if (zeroInterestExpiryInput && zeroInterestExpiryInput.value && zeroInterestExpiryInput.value.trim() !== '') {
+          updateData.zeroInterestExpiry = zeroInterestExpiryInput.value.trim();
+        } else {
+          updateData.zeroInterestExpiry = null;
+        }
+      } else {
+        updateData.zeroInterestExpiry = null;
+      }
+    } else {
+      // Si no es tarjeta de crédito, eliminar estos campos
+      updateData.closingDay = null;
+      updateData.paymentDay = null;
+      updateData.zeroInterestExpiry = null;
+    }
+
+    await updateDoc(doc(db, "liabilities", currentUpdateDebtId), updateData);
 
     cache.clear("liabilities");
     closeUpdateDebtModal();
     await displayDebts();
     await loadNetworth(); // Actualizar también la sección de patrimonio neto
-    showMessage(`✅ Deuda actualizada a $${newAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`, "success");
+    showMessage(`✅ Deuda "${name}" actualizada exitosamente`, "success");
   } catch (error) {
     handleError(error, "confirmUpdateDebt");
     showMessage("Error al actualizar la deuda: " + error.message, "error");
@@ -4238,7 +4357,44 @@ window.confirmUpdateDebt = async function () {
 window.closeUpdateDebtModal = function () {
   document.getElementById("updateDebtModal").classList.remove("active");
   currentUpdateDebtId = null;
-  document.getElementById("updateDebtAmount").value = "";
+  
+  // Limpiar todos los campos del formulario
+  if (document.getElementById("updateDebtType")) {
+    document.getElementById("updateDebtType").value = "Tarjeta de Crédito";
+  }
+  if (document.getElementById("updateDebtName")) {
+    document.getElementById("updateDebtName").value = "";
+  }
+  if (document.getElementById("updateDebtOwner")) {
+    document.getElementById("updateDebtOwner").value = "Yo";
+  }
+  if (document.getElementById("updateDebtAmount")) {
+    document.getElementById("updateDebtAmount").value = "";
+  }
+  if (document.getElementById("updateDebtInterest")) {
+    document.getElementById("updateDebtInterest").value = "";
+  }
+  if (document.getElementById("updateDebtMinPayment")) {
+    document.getElementById("updateDebtMinPayment").value = "";
+  }
+  if (document.getElementById("updateDebtClosingDay")) {
+    document.getElementById("updateDebtClosingDay").value = "";
+  }
+  if (document.getElementById("updateDebtPaymentDay")) {
+    document.getElementById("updateDebtPaymentDay").value = "";
+  }
+  if (document.getElementById("updateDebtHasZeroInterest")) {
+    document.getElementById("updateDebtHasZeroInterest").value = "no";
+  }
+  if (document.getElementById("updateDebtZeroInterestExpiry")) {
+    document.getElementById("updateDebtZeroInterestExpiry").value = "";
+  }
+  if (document.getElementById("updateCreditCardFields")) {
+    document.getElementById("updateCreditCardFields").style.display = "none";
+  }
+  if (document.getElementById("updateZeroInterestFields")) {
+    document.getElementById("updateZeroInterestFields").style.display = "none";
+  }
 };
 
 // Variable global para almacenar el ID de la deuda actual en el modal de pago

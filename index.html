@@ -1155,26 +1155,92 @@
       </div>
     </div>
 
-    <!-- Modal para actualizar monto de deuda -->
+    <!-- Modal para actualizar deuda completa -->
     <div id="updateDebtModal" class="modal">
-      <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-content" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
         <div class="modal-header">
-          <h3 id="updateDebtModalTitle">✏️ Actualizar Monto de Deuda</h3>
+          <h3 id="updateDebtModalTitle">✏️ Actualizar Deuda</h3>
           <button class="close-modal" onclick="closeUpdateDebtModal()">×</button>
         </div>
         <div id="updateDebtModalBody" style="padding: 20px;">
           <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-            <p style="color: #666; margin: 0; font-size: 14px;"><strong>Deuda:</strong> <span id="updateDebtName" style="color: #333; font-weight: 600;"></span></p>
-            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;"><strong>Monto Anterior:</strong> <span id="updateDebtPreviousAmount" style="color: #ef4444; font-weight: bold; font-size: 18px;"></span></p>
+            <p style="color: #666; margin: 0; font-size: 14px;"><strong>Edita todos los campos que necesites corregir o completar</strong></p>
           </div>
+          
           <div class="form-group">
-            <label>Nuevo Monto:</label>
-            <input type="number" id="updateDebtAmount" placeholder="0.00" step="0.01" min="0" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;" />
-            <small style="color: #666;">Ingresa el nuevo monto de la deuda</small>
+            <label>Tipo de Deuda:</label>
+            <select id="updateDebtType" onchange="toggleUpdateCreditCardFields()">
+              <option value="Tarjeta de Crédito">💳 Tarjeta de Crédito</option>
+              <option value="Préstamo Personal">📋 Préstamo Personal</option>
+              <option value="Hipoteca">🏠 Hipoteca</option>
+              <option value="Préstamo de Auto">🚗 Préstamo de Auto</option>
+              <option value="Préstamo Estudiantil">🎓 Préstamo Estudiantil</option>
+              <option value="Otro">📦 Otro</option>
+            </select>
           </div>
+          
+          <div class="form-group">
+            <label>Nombre/Descripción:</label>
+            <input type="text" id="updateDebtName" placeholder="Ej: Bank of America, Citi Bank, Tarjeta Visa" />
+          </div>
+          
+          <div class="form-group">
+            <label>Propietario:</label>
+            <select id="updateDebtOwner">
+              <option value="Yo">👤 Yo</option>
+              <option value="Esposa">👩 Esposa</option>
+              <option value="Ambos">👥 Ambos</option>
+            </select>
+            <small style="color: #666;">Selecciona quién es responsable de esta deuda</small>
+          </div>
+          
+          <div class="form-group">
+            <label>Monto Total de la Deuda:</label>
+            <input type="number" id="updateDebtAmount" placeholder="0.00" step="0.01" min="0" />
+          </div>
+          
+          <div class="form-group">
+            <label>Tasa de Interés (% anual):</label>
+            <input type="number" id="updateDebtInterest" placeholder="0.00" step="0.01" />
+            <small style="color: #666;">Ejemplo: 18.5 para 18.5% anual</small>
+          </div>
+          
+          <div class="form-group">
+            <label>Pago Mínimo Mensual:</label>
+            <input type="number" id="updateDebtMinPayment" placeholder="0.00" step="0.01" />
+          </div>
+          
+          <!-- Campos adicionales para tarjetas de crédito -->
+          <div id="updateCreditCardFields" style="display: none;">
+            <div class="form-group">
+              <label>Fecha de Cierre de Ciclo (día del mes):</label>
+              <input type="number" id="updateDebtClosingDay" placeholder="Ej: 15" min="1" max="31" />
+              <small style="color: #666;">Día del mes en que cierra el ciclo (1-31)</small>
+            </div>
+            <div class="form-group">
+              <label>Fecha de Pago (día del mes):</label>
+              <input type="number" id="updateDebtPaymentDay" placeholder="Ej: 25" min="1" max="31" />
+              <small style="color: #666;">Día del mes en que debes pagar (1-31)</small>
+            </div>
+            <div class="form-group">
+              <label>¿Tiene 0% de interés?</label>
+              <select id="updateDebtHasZeroInterest" onchange="toggleUpdateZeroInterestFields()">
+                <option value="no">No</option>
+                <option value="yes">Sí</option>
+              </select>
+            </div>
+            <div id="updateZeroInterestFields" style="display: none;">
+              <div class="form-group">
+                <label>Fecha de Caducidad del 0% de Interés:</label>
+                <input type="date" id="updateDebtZeroInterestExpiry" />
+                <small style="color: #666;">Fecha en que caduca la promoción de 0%</small>
+              </div>
+            </div>
+          </div>
+          
           <div style="display: flex; gap: 10px; margin-top: 20px;">
             <button onclick="closeUpdateDebtModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancelar</button>
-            <button onclick="confirmUpdateDebt()" style="flex: 1; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Actualizar Monto</button>
+            <button onclick="confirmUpdateDebt()" style="flex: 1; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Actualizar Deuda</button>
           </div>
         </div>
       </div>
