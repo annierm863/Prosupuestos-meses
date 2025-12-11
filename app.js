@@ -3619,21 +3619,36 @@ async function loadLiabilities() {
     const liabilities = [];
     snapshot.forEach((doc) => {
       const data = doc.data();
+      
       // Convertir campos de fecha si son Timestamps de Firestore
       if (data.zeroInterestExpiry) {
         // Si es un Timestamp de Firestore, convertirlo a string
-        if (data.zeroInterestExpiry.toDate) {
+        if (data.zeroInterestExpiry.toDate && typeof data.zeroInterestExpiry.toDate === 'function') {
           const date = data.zeroInterestExpiry.toDate();
           data.zeroInterestExpiry = date.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+        } else if (typeof data.zeroInterestExpiry === 'string' && data.zeroInterestExpiry.trim() !== '') {
+          // Ya es un string, mantenerlo
+          data.zeroInterestExpiry = data.zeroInterestExpiry.trim();
+        } else {
+          data.zeroInterestExpiry = null;
         }
       }
-      // Asegurar que closingDay y paymentDay sean números
-      if (data.closingDay !== undefined) {
-        data.closingDay = parseInt(data.closingDay) || null;
+      
+      // Asegurar que closingDay y paymentDay sean números válidos (1-31)
+      if (data.closingDay !== undefined && data.closingDay !== null) {
+        const closingDayNum = parseInt(data.closingDay);
+        data.closingDay = (!isNaN(closingDayNum) && closingDayNum >= 1 && closingDayNum <= 31) ? closingDayNum : null;
+      } else {
+        data.closingDay = null;
       }
-      if (data.paymentDay !== undefined) {
-        data.paymentDay = parseInt(data.paymentDay) || null;
+      
+      if (data.paymentDay !== undefined && data.paymentDay !== null) {
+        const paymentDayNum = parseInt(data.paymentDay);
+        data.paymentDay = (!isNaN(paymentDayNum) && paymentDayNum >= 1 && paymentDayNum <= 31) ? paymentDayNum : null;
+      } else {
+        data.paymentDay = null;
       }
+      
       liabilities.push({ id: doc.id, ...data });
     });
     liabilities.sort((a, b) => new Date(b.createdAt?.toDate() || 0) - new Date(a.createdAt?.toDate() || 0));
@@ -4042,33 +4057,32 @@ window.addDebt = async function () {
     };
 
     // Agregar campos específicos de tarjeta de crédito
-    if (type === "Tarjeta de Crédito") {
-      const closingDayInput = document.getElementById("debtClosingDay");
-      const paymentDayInput = document.getElementById("debtPaymentDay");
-      const hasZeroInterest = document.getElementById("debtHasZeroInterest").value === "yes";
-      
-      // Guardar día de cierre si está presente
-      if (closingDayInput && closingDayInput.value) {
-        const closingDay = parseInt(closingDayInput.value);
-        if (!isNaN(closingDay) && closingDay >= 1 && closingDay <= 31) {
-          liabilityData.closingDay = closingDay;
-        }
+    // Nota: Estos campos pueden aplicarse a cualquier tipo de deuda si se proporcionan
+    const closingDayInput = document.getElementById("debtClosingDay");
+    const paymentDayInput = document.getElementById("debtPaymentDay");
+    const hasZeroInterest = document.getElementById("debtHasZeroInterest")?.value === "yes";
+    
+    // Guardar día de cierre si está presente (solo para tarjetas de crédito o si se proporciona)
+    if (closingDayInput && closingDayInput.value && closingDayInput.value.trim() !== '') {
+      const closingDay = parseInt(closingDayInput.value.trim());
+      if (!isNaN(closingDay) && closingDay >= 1 && closingDay <= 31) {
+        liabilityData.closingDay = closingDay;
       }
-      
-      // Guardar día de pago si está presente
-      if (paymentDayInput && paymentDayInput.value) {
-        const paymentDay = parseInt(paymentDayInput.value);
-        if (!isNaN(paymentDay) && paymentDay >= 1 && paymentDay <= 31) {
-          liabilityData.paymentDay = paymentDay;
-        }
+    }
+    
+    // Guardar día de pago si está presente (solo para tarjetas de crédito o si se proporciona)
+    if (paymentDayInput && paymentDayInput.value && paymentDayInput.value.trim() !== '') {
+      const paymentDay = parseInt(paymentDayInput.value.trim());
+      if (!isNaN(paymentDay) && paymentDay >= 1 && paymentDay <= 31) {
+        liabilityData.paymentDay = paymentDay;
       }
-      
-      // Guardar fecha de caducidad de 0% interés si está presente
-      if (hasZeroInterest) {
-        const zeroInterestExpiryInput = document.getElementById("debtZeroInterestExpiry");
-        if (zeroInterestExpiryInput && zeroInterestExpiryInput.value) {
-          liabilityData.zeroInterestExpiry = zeroInterestExpiryInput.value;
-        }
+    }
+    
+    // Guardar fecha de caducidad de 0% interés si está presente
+    if (hasZeroInterest) {
+      const zeroInterestExpiryInput = document.getElementById("debtZeroInterestExpiry");
+      if (zeroInterestExpiryInput && zeroInterestExpiryInput.value && zeroInterestExpiryInput.value.trim() !== '') {
+        liabilityData.zeroInterestExpiry = zeroInterestExpiryInput.value.trim();
       }
     }
 
@@ -4374,6 +4388,140 @@ async function loadDebts() {
   return liabilities.filter((l) => l.amount > 0);
 }
 
+// Mostrar detalles de una deuda específica
+window.showDebtDetails = async function (debtId) {
+  if (!currentUser || !debtId) return;
+  
+  try {
+    showLoading("Cargando detalles de la deuda...");
+    
+    // Cargar la deuda específica
+    const debtDoc = await getDoc(doc(db, "liabilities", debtId));
+    if (!debtDoc.exists()) {
+      showMessage("Deuda no encontrada", "error");
+      return;
+    }
+    
+    const debt = { id: debtDoc.id, ...debtDoc.data() };
+    
+    // Convertir campos si es necesario
+    if (debt.zeroInterestExpiry) {
+      if (debt.zeroInterestExpiry.toDate && typeof debt.zeroInterestExpiry.toDate === 'function') {
+        const date = debt.zeroInterestExpiry.toDate();
+        debt.zeroInterestExpiry = date.toISOString().split('T')[0];
+      }
+    }
+    
+    if (debt.closingDay !== undefined && debt.closingDay !== null) {
+      debt.closingDay = parseInt(debt.closingDay) || null;
+    }
+    
+    if (debt.paymentDay !== undefined && debt.paymentDay !== null) {
+      debt.paymentDay = parseInt(debt.paymentDay) || null;
+    }
+    
+    // Calcular progreso
+    const progress = debt.originalAmount ? ((1 - debt.amount / debt.originalAmount) * 100).toFixed(1) : 0;
+    
+    // Obtener icono de propietario
+    const ownerIcon = debt.owner === "Yo" ? "👤" : debt.owner === "Esposa" ? "👩" : "👥";
+    
+    // Preparar información para mostrar
+    const detailsHTML = `
+      <div style="background: white; padding: 20px; border-radius: 10px;">
+        <div style="margin-bottom: 20px;">
+          <h3 style="color: #333; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+            <span>💳</span>
+            <span>${debt.name}</span>
+            <span style="background: #e0e7ff; color: #4338ca; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${ownerIcon} ${debt.owner || "Yo"}</span>
+          </h3>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">Tipo de Deuda</p>
+            <p style="color: #333; font-size: 18px; font-weight: 600; margin: 0;">${debt.type || "N/A"}</p>
+          </div>
+          
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">Monto Actual</p>
+            <p style="color: #ef4444; font-size: 18px; font-weight: 600; margin: 0;">$${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+          </div>
+          
+          ${debt.originalAmount ? `
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">Monto Original</p>
+            <p style="color: #333; font-size: 18px; font-weight: 600; margin: 0;">$${debt.originalAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+          </div>
+          ` : ''}
+          
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">Tasa de Interés</p>
+            <p style="color: #333; font-size: 18px; font-weight: 600; margin: 0;">${debt.interest || 0}% anual</p>
+          </div>
+          
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">Pago Mínimo Mensual</p>
+            <p style="color: #333; font-size: 18px; font-weight: 600; margin: 0;">$${(debt.minPayment || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+          </div>
+        </div>
+        
+        ${(debt.closingDay !== null && debt.closingDay !== undefined && typeof debt.closingDay === 'number' && debt.closingDay >= 1 && debt.closingDay <= 31) ? `
+        <div style="background: #fff7ed; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #f59e0b;">
+          <p style="color: #333; font-size: 14px; font-weight: 600; margin: 0 0 5px 0;">📅 Cierre de Ciclo</p>
+          <p style="color: #666; font-size: 16px; margin: 0;">Día ${debt.closingDay} de cada mes</p>
+        </div>
+        ` : ''}
+        
+        ${(debt.paymentDay !== null && debt.paymentDay !== undefined && typeof debt.paymentDay === 'number' && debt.paymentDay >= 1 && debt.paymentDay <= 31) ? `
+        <div style="background: #fef2f2; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ef4444;">
+          <p style="color: #333; font-size: 14px; font-weight: 600; margin: 0 0 5px 0;">💳 Fecha de Pago</p>
+          <p style="color: #666; font-size: 16px; margin: 0;">Día ${debt.paymentDay} de cada mes</p>
+        </div>
+        ` : ''}
+        
+        ${(debt.zeroInterestExpiry && debt.zeroInterestExpiry !== '' && debt.zeroInterestExpiry !== null && debt.zeroInterestExpiry !== undefined) ? `
+        <div style="background: #eff6ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #3b82f6;">
+          <p style="color: #333; font-size: 14px; font-weight: 600; margin: 0 0 5px 0;">⏰ 0% Interés hasta</p>
+          <p style="color: #666; font-size: 16px; margin: 0;">${formatDate(debt.zeroInterestExpiry)}</p>
+        </div>
+        ` : ''}
+        
+        ${debt.originalAmount ? `
+        <div style="margin-top: 20px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+            <span style="color: #666; font-size: 14px;">Progreso de pago</span>
+            <span style="color: #4ade80; font-weight: bold; font-size: 14px;">${progress}%</span>
+          </div>
+          <div style="background: #e5e7eb; height: 12px; border-radius: 6px; overflow: hidden;">
+            <div style="background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%); height: 100%; width: ${progress}%; transition: width 0.3s;"></div>
+          </div>
+          <p style="color: #666; font-size: 12px; margin-top: 5px;">
+            Restante: $${(debt.amount).toLocaleString("es-ES", { minimumFractionDigits: 2 })} de $${(debt.originalAmount).toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+          </p>
+        </div>
+        ` : ''}
+        
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #e5e7eb;">
+          <p style="color: #666; font-size: 12px; margin: 0;">
+            <strong>Fecha de creación:</strong> ${debt.createdAt ? formatDate(debt.createdAt.toDate ? debt.createdAt.toDate().toISOString().split('T')[0] : debt.createdAt) : "N/A"}
+          </p>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById("modalTitle").textContent = "💳 Detalles de la Deuda";
+    document.getElementById("modalBody").innerHTML = detailsHTML;
+    document.getElementById("detailModal").classList.add("active");
+    
+  } catch (error) {
+    handleError(error, "showDebtDetails");
+    showMessage("Error al cargar detalles de la deuda: " + error.message, "error");
+  } finally {
+    hideLoading();
+  }
+};
+
 async function displayDebts() {
   if (!currentUser) return;
   try {
@@ -4473,6 +4621,32 @@ async function displayDebts() {
           // Obtener icono de propietario
           const ownerIcon = debt.owner === "Yo" ? "👤" : debt.owner === "Esposa" ? "👩" : "👥";
           
+          // Verificar y preparar campos para mostrar
+          let hasClosingDay = false;
+          let closingDayValue = null;
+          if (debt.closingDay !== null && debt.closingDay !== undefined) {
+            const closingDayNum = typeof debt.closingDay === 'number' ? debt.closingDay : parseInt(debt.closingDay);
+            if (!isNaN(closingDayNum) && closingDayNum >= 1 && closingDayNum <= 31) {
+              hasClosingDay = true;
+              closingDayValue = closingDayNum;
+            }
+          }
+          
+          let hasPaymentDay = false;
+          let paymentDayValue = null;
+          if (debt.paymentDay !== null && debt.paymentDay !== undefined) {
+            const paymentDayNum = typeof debt.paymentDay === 'number' ? debt.paymentDay : parseInt(debt.paymentDay);
+            if (!isNaN(paymentDayNum) && paymentDayNum >= 1 && paymentDayNum <= 31) {
+              hasPaymentDay = true;
+              paymentDayValue = paymentDayNum;
+            }
+          }
+          
+          const hasZeroInterest = debt.zeroInterestExpiry && 
+                                 debt.zeroInterestExpiry !== '' && 
+                                 debt.zeroInterestExpiry !== null && 
+                                 debt.zeroInterestExpiry !== undefined;
+          
           return `
       <div class="card" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid #ef4444; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onclick="showDebtDetails('${debt.id}')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
         ${alerts.length > 0 ? `
@@ -4498,9 +4672,9 @@ async function displayDebts() {
             <p style="color: #666; margin: 5px 0;"><strong>Interés:</strong> ${debt.interest || 0}% anual</p>
             <p style="color: #666; margin: 5px 0;"><strong>Pago Mínimo:</strong> $${(debt.minPayment || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })}/mes</p>
             
-            ${(debt.closingDay !== undefined && debt.closingDay !== null && debt.closingDay !== '') ? `<p style="color: #666; margin: 5px 0;"><strong>📅 Cierre de Ciclo:</strong> Día ${debt.closingDay} de cada mes</p>` : ''}
-            ${(debt.paymentDay !== undefined && debt.paymentDay !== null && debt.paymentDay !== '') ? `<p style="color: #666; margin: 5px 0;"><strong>💳 Fecha de Pago:</strong> Día ${debt.paymentDay} de cada mes</p>` : ''}
-            ${(debt.zeroInterestExpiry !== undefined && debt.zeroInterestExpiry !== null && debt.zeroInterestExpiry !== '') ? `<p style="color: #666; margin: 5px 0;"><strong>⏰ 0% Interés hasta:</strong> ${formatDate(debt.zeroInterestExpiry)}</p>` : ''}
+            ${hasClosingDay ? `<p style="color: #666; margin: 5px 0;"><strong>📅 Cierre de Ciclo:</strong> Día ${closingDayValue} de cada mes</p>` : ''}
+            ${hasPaymentDay ? `<p style="color: #666; margin: 5px 0;"><strong>💳 Fecha de Pago:</strong> Día ${paymentDayValue} de cada mes</p>` : ''}
+            ${hasZeroInterest ? `<p style="color: #666; margin: 5px 0;"><strong>⏰ 0% Interés hasta:</strong> ${formatDate(debt.zeroInterestExpiry)}</p>` : ''}
             
             ${debt.originalAmount ? `
             <div style="margin-top: 15px;">
