@@ -4134,14 +4134,34 @@ window.updateDebtAmount = async function (id) {
   }
 
   try {
-    // Cargar la deuda actual
-    const debtDoc = await getDoc(doc(db, "liabilities", id));
-    if (!debtDoc.exists()) {
+    // Intentar obtener la deuda del caché primero (más rápido y funciona offline)
+    let debt = null;
+    const cachedLiabilities = cache.get("liabilities");
+    
+    if (cachedLiabilities && Array.isArray(cachedLiabilities)) {
+      debt = cachedLiabilities.find(d => d.id === id);
+    }
+    
+    // Si no está en caché, intentar cargar desde Firebase (solo si hay conexión)
+    if (!debt) {
+      try {
+        const debtDoc = await getDoc(doc(db, "liabilities", id));
+        if (debtDoc.exists()) {
+          debt = { id: debtDoc.id, ...debtDoc.data() };
+        }
+      } catch (firebaseError) {
+        // Si falla la conexión, intentar usar los datos de la lista actual
+        console.warn("No se pudo cargar desde Firebase, usando datos del caché:", firebaseError);
+        const allDebts = await loadDebts();
+        debt = allDebts.find(d => d.id === id);
+      }
+    }
+    
+    if (!debt) {
       showMessage("Deuda no encontrada", "error");
       return;
     }
 
-    const debt = { id: debtDoc.id, ...debtDoc.data() };
     currentUpdateDebtId = id;
     
     // Llenar el modal con la información
@@ -4154,7 +4174,9 @@ window.updateDebtAmount = async function (id) {
     document.getElementById("updateDebtAmount").focus();
     document.getElementById("updateDebtAmount").select();
   } catch (error) {
+    console.error("Error en updateDebtAmount:", error);
     handleError(error, "updateDebtAmount");
+    showMessage("Error al cargar la información de la deuda. Intenta recargar la página.", "error");
   }
 };
 
@@ -4172,9 +4194,26 @@ window.confirmUpdateDebt = async function () {
   try {
     showLoading("Actualizando deuda...");
     
-    const debtDoc = await getDoc(doc(db, "liabilities", currentUpdateDebtId));
-    if (!debtDoc.exists()) {
+    // Verificar que la deuda existe antes de actualizar
+    // Usar getDoc con manejo de errores offline
+    let debtExists = true;
+    try {
+      const debtDoc = await getDoc(doc(db, "liabilities", currentUpdateDebtId));
+      debtExists = debtDoc.exists();
+    } catch (firebaseError) {
+      // Si hay error de conexión, intentar actualizar de todas formas
+      // Firebase puede tener persistencia local y sincronizar después
+      if (firebaseError.code === 'unavailable' || firebaseError.message?.includes('offline')) {
+        console.warn("Cliente offline, intentando actualizar con persistencia local");
+        debtExists = true; // Asumir que existe si está en caché
+      } else {
+        throw firebaseError;
+      }
+    }
+    
+    if (!debtExists) {
       showMessage("Deuda no encontrada", "error");
+      hideLoading();
       return;
     }
 
