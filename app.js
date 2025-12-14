@@ -4814,11 +4814,139 @@ async function displayDebts() {
       .join("");
 
     document.getElementById("debtsCards").innerHTML = cardsHTML;
+    
+    // Obtener estrategia actual y calcular orden de pago
+    const currentStrategy = document.getElementById("debtStrategy")?.value || "snowball";
+    const paymentOrder = calculatePaymentOrder(debts, currentStrategy);
+    const savings = calculateStrategySavings(debts);
+    const otherStrategy = currentStrategy === "snowball" ? "avalanche" : "snowball";
+    
+    // Crear mapa de prioridades para badges
+    const priorityMap = {};
+    paymentOrder.forEach(debt => {
+      priorityMap[debt.id] = debt.priority;
+    });
+    
+    // Panel de recomendaciones
+    const recommendationsHTML = debts.length > 0 ? `
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 15px; margin-bottom: 20px; color: white;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+          <h3 style="color: white; margin: 0;">📋 Orden Recomendado de Pago</h3>
+          <div style="display: flex; gap: 10px;">
+            <button onclick="document.getElementById('debtStrategy').value='snowball'; updateDebtStrategy(); displayDebts();" 
+                    style="background: ${currentStrategy === 'snowball' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'}; 
+                           color: white; border: 1px solid white; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600;">
+              ❄️ Bola de Nieve
+            </button>
+            <button onclick="document.getElementById('debtStrategy').value='avalanche'; updateDebtStrategy(); displayDebts();" 
+                    style="background: ${currentStrategy === 'avalanche' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'}; 
+                           color: white; border: 1px solid white; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600;">
+              🏔️ Avalancha
+            </button>
+          </div>
+        </div>
+        
+        <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 10px; margin-bottom: 15px; backdrop-filter: blur(10px);">
+          <p style="color: white; font-size: 14px; margin: 0 0 10px 0; font-weight: 600;">Estrategia: ${currentStrategy === "snowball" ? "❄️ Bola de Nieve" : "🏔️ Avalancha"}</p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+            <div>
+              <p style="color: rgba(255,255,255,0.8); font-size: 12px; margin: 0;">💰 Ahorro Estimado</p>
+              <p style="color: white; font-size: 20px; font-weight: bold; margin: 5px 0 0 0;">$${savings[currentStrategy] ? savings[currentStrategy].toFixed(2) : '0.00'}</p>
+            </div>
+            <div>
+              <p style="color: rgba(255,255,255,0.8); font-size: 12px; margin: 0;">⏱️ Tiempo Estimado</p>
+              <p style="color: white; font-size: 20px; font-weight: bold; margin: 5px 0 0 0;">
+                ${savings[currentStrategy + 'Time'] ? Math.floor(savings[currentStrategy + 'Time'] / 12) : 0} año(s) ${savings[currentStrategy + 'Time'] ? savings[currentStrategy + 'Time'] % 12 : 0} mes(es)
+              </p>
+            </div>
+          </div>
+          ${savings[currentStrategy] > savings[otherStrategy] ? `
+            <p style="color: #d1fae5; font-size: 12px; margin: 10px 0 0 0; font-weight: 600;">
+              ✅ La estrategia actual te ahorraría $${(savings[currentStrategy] - savings[otherStrategy]).toFixed(2)} más que ${otherStrategy === "snowball" ? "Bola de Nieve" : "Avalancha"}
+            </p>
+          ` : savings[otherStrategy] > savings[currentStrategy] ? `
+            <p style="color: #fef3c7; font-size: 12px; margin: 10px 0 0 0; font-weight: 600;">
+              💡 ${otherStrategy === "snowball" ? "Bola de Nieve" : "Avalancha"} te ahorraría $${(savings[otherStrategy] - savings[currentStrategy]).toFixed(2)} más
+            </p>
+          ` : ''}
+        </div>
+        
+        <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 10px; backdrop-filter: blur(10px);">
+          <p style="color: white; font-weight: 600; margin: 0 0 10px 0;">🎯 Top 3 Prioridades:</p>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${paymentOrder.slice(0, 3).map((debt, index) => `
+              <div style="background: rgba(255,255,255,0.2); padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+                <span style="background: ${index === 0 ? '#10b981' : index === 1 ? '#f59e0b' : '#6366f1'}; 
+                              color: white; width: 30px; height: 30px; border-radius: 50%; 
+                              display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">
+                  ${index + 1}
+                </span>
+                <div style="flex: 1;">
+                  <p style="color: white; font-weight: 600; margin: 0; font-size: 14px;">${debt.name}</p>
+                  <p style="color: rgba(255,255,255,0.8); font-size: 12px; margin: 3px 0 0 0;">$${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} • ${debt.reason}</p>
+                </div>
+                ${index === 0 ? `
+                  <button onclick="registerPayment('${debt.id}')" 
+                          style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                    💰 Pagar Ahora
+                  </button>
+                ` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        ${paymentOrder.length > 3 ? `
+          <button onclick="showFullDebtPlan()" 
+                  style="width: 100%; margin-top: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 10px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+            📊 Ver Plan Completo (${paymentOrder.length} deudas)
+          </button>
+        ` : ''}
+      </div>
+    ` : '';
+    
+    // Insertar panel de recomendaciones antes de la lista
+    const existingRecommendations = document.getElementById("debtRecommendations");
+    if (existingRecommendations) {
+      existingRecommendations.remove();
+    }
+    
+    const debtsListContainer = document.getElementById("debtsList");
+    if (debtsListContainer && recommendationsHTML) {
+      const recommendationsDiv = document.createElement('div');
+      recommendationsDiv.id = 'debtRecommendations';
+      recommendationsDiv.innerHTML = recommendationsHTML;
+      debtsListContainer.parentNode.insertBefore(recommendationsDiv, debtsListContainer);
+    }
 
     const debtsHTML = debts.length > 0 ? debts
       .map(
         (debt) => {
           const progress = debt.originalAmount ? ((1 - debt.amount / debt.originalAmount) * 100).toFixed(1) : 0;
+          
+          // Obtener prioridad de esta deuda
+          const priority = priorityMap[debt.id] || null;
+          const priorityColor = priority === 1 ? '#10b981' : priority === 2 ? '#f59e0b' : priority === 3 ? '#6366f1' : '#9ca3af';
+          const priorityBadge = priority ? `
+            <span style="position: absolute; top: 10px; right: 10px; background: ${priorityColor}; 
+                         color: white; width: 32px; height: 32px; border-radius: 50%; 
+                         display: flex; align-items: center; justify-content: center; 
+                         font-weight: bold; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10;">
+              ${priority}
+            </span>
+          ` : '';
+          
+          // Recordatorio si es la primera prioridad
+          const reminder = priority === 1 ? `
+            <div style="background: #d1fae5; border-left: 4px solid #10b981; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+              <p style="color: #065f46; margin: 0; font-weight: 600; font-size: 14px;">
+                🔔 Es momento de pagar esta deuda primero
+              </p>
+              <p style="color: #047857; margin: 5px 0 0 0; font-size: 12px;">
+                Según la estrategia ${currentStrategy === "snowball" ? "Bola de Nieve" : "Avalancha"}, esta es tu prioridad #1
+              </p>
+            </div>
+          ` : '';
           
           // Calcular alertas y fechas importantes
           const alerts = [];
@@ -4923,7 +5051,7 @@ async function displayDebts() {
                 <span style="color: #4ade80; font-weight: bold; font-size: 12px;">${progress}%</span>
               </div>
               <div style="background: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;">
-                <div style="background: #4ade80; height: 100%; width: ${progress}%; transition: width 0.3s;"></div>
+                <div style="background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%); height: 100%; width: ${progress}%; transition: width 0.3s;"></div>
               </div>
             </div>
             ` : ''}
@@ -5002,6 +5130,145 @@ async function displayDebts() {
   }
 }
 
+// ============= FUNCIONES DE CÁLCULO DE ESTRATEGIAS =============
+
+// Calcular orden de pago según estrategia
+function calculatePaymentOrder(debts, strategy) {
+  if (!debts || debts.length === 0) return [];
+  
+  let sorted = [];
+  if (strategy === "snowball") {
+    sorted = [...debts].sort((a, b) => a.amount - b.amount);
+  } else {
+    sorted = [...debts].sort((a, b) => (b.interest || 0) - (a.interest || 0));
+  }
+  
+  return sorted.map((debt, index) => ({
+    ...debt,
+    priority: index + 1,
+    reason: strategy === "snowball" 
+      ? `Menor monto ($${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })})`
+      : `Mayor interés (${debt.interest || 0}% anual)`
+  }));
+}
+
+// Calcular ahorros estimados con cada estrategia (simulación simplificada)
+function calculateStrategySavings(debts) {
+  if (!debts || debts.length === 0) return { snowball: 0, avalanche: 0, snowballTime: 0, avalancheTime: 0 };
+  
+  const extraPayment = 200; // Pago extra mensual asumido para la deuda prioritaria
+  
+  // Simulación Bola de Nieve
+  const snowballOrder = [...debts].sort((a, b) => a.amount - b.amount);
+  let snowballTotalInterest = 0;
+  let snowballMonths = 0;
+  
+  snowballOrder.forEach((debt, index) => {
+    let remaining = debt.amount;
+    const monthlyPayment = debt.minPayment + (index === 0 ? extraPayment : 0);
+    let months = 0;
+    
+    while (remaining > 0.01 && months < 600) { // Límite de 50 años
+      const monthlyInterest = remaining * (debt.interest || 0) / 100 / 12;
+      snowballTotalInterest += monthlyInterest;
+      remaining = remaining + monthlyInterest - monthlyPayment;
+      months++;
+      if (remaining < 0) remaining = 0;
+    }
+    
+    if (index === 0) snowballMonths = months;
+  });
+  
+  // Simulación Avalancha
+  const avalancheOrder = [...debts].sort((a, b) => (b.interest || 0) - (a.interest || 0));
+  let avalancheTotalInterest = 0;
+  let avalancheMonths = 0;
+  
+  avalancheOrder.forEach((debt, index) => {
+    let remaining = debt.amount;
+    const monthlyPayment = debt.minPayment + (index === 0 ? extraPayment : 0);
+    let months = 0;
+    
+    while (remaining > 0.01 && months < 600) {
+      const monthlyInterest = remaining * (debt.interest || 0) / 100 / 12;
+      avalancheTotalInterest += monthlyInterest;
+      remaining = remaining + monthlyInterest - monthlyPayment;
+      months++;
+      if (remaining < 0) remaining = 0;
+    }
+    
+    if (index === 0) avalancheMonths = months;
+  });
+  
+  // Calcular interés total sin estrategia (solo pagos mínimos)
+  let baselineInterest = 0;
+  debts.forEach(debt => {
+    let remaining = debt.amount;
+    let months = 0;
+    while (remaining > 0.01 && months < 600) {
+      const monthlyInterest = remaining * (debt.interest || 0) / 100 / 12;
+      baselineInterest += monthlyInterest;
+      remaining = remaining + monthlyInterest - (debt.minPayment || 0);
+      months++;
+      if (remaining < 0) remaining = 0;
+    }
+  });
+  
+  return {
+    snowball: Math.max(0, baselineInterest - snowballTotalInterest),
+    avalanche: Math.max(0, baselineInterest - avalancheTotalInterest),
+    snowballTime: snowballMonths,
+    avalancheTime: avalancheMonths,
+    baseline: baselineInterest
+  };
+}
+
+// Calcular tiempo estimado para pagar todas las deudas
+function calculateTimeToPayoff(debts, strategy, extraPayment = 0) {
+  if (!debts || debts.length === 0) return { months: 0, years: 0 };
+  
+  const order = calculatePaymentOrder(debts, strategy);
+  const totalMinPayments = debts.reduce((sum, d) => sum + (d.minPayment || 0), 0);
+  
+  let remainingDebts = debts.map(d => ({ ...d, remaining: d.amount }));
+  let totalMonths = 0;
+  
+  order.forEach((debt, index) => {
+    const debtData = remainingDebts.find(d => d.id === debt.id);
+    if (debtData && debtData.remaining > 0) {
+      const payment = debtData.minPayment + (index === 0 ? extraPayment : 0);
+      const monthlyInterest = (debtData.remaining * (debt.interest || 0) / 100) / 12;
+      const effectivePayment = Math.max(0, payment - monthlyInterest);
+      
+      if (effectivePayment > 0) {
+        const months = Math.ceil(debtData.remaining / effectivePayment);
+        totalMonths += months;
+        
+        // Redistribuir el pago mínimo de esta deuda a la siguiente
+        if (index < order.length - 1) {
+          const nextDebt = remainingDebts.find(d => d.id === order[index + 1].id);
+          if (nextDebt) {
+            nextDebt.minPayment += debtData.minPayment;
+          }
+        }
+      }
+    }
+  });
+  
+  return {
+    months: totalMonths,
+    years: Math.floor(totalMonths / 12),
+    monthsRemainder: totalMonths % 12
+  };
+}
+
+// Obtener prioridad de una deuda específica
+function getDebtPriority(debtId, debts, strategy) {
+  const order = calculatePaymentOrder(debts, strategy);
+  const debt = order.find(d => d.id === debtId);
+  return debt ? debt.priority : null;
+}
+
 window.updateDebtStrategy = function () {
   const strategy = document.getElementById("debtStrategy").value;
   loadDebts().then((debts) => {
@@ -5010,31 +5277,94 @@ window.updateDebtStrategy = function () {
       return;
     }
 
-    let sortedDebts = [];
-    if (strategy === "snowball") {
-      sortedDebts = [...debts].sort((a, b) => a.amount - b.amount);
-    } else {
-      sortedDebts = [...debts].sort((a, b) => (b.interest || 0) - (a.interest || 0));
-    }
+    const sortedDebts = calculatePaymentOrder(debts, strategy);
 
+    // Calcular ahorros y tiempos
+    const savings = calculateStrategySavings(debts);
+    const timeToPayoff = calculateTimeToPayoff(debts, strategy);
+    const otherStrategy = strategy === "snowball" ? "avalanche" : "snowball";
+    const otherStrategyName = otherStrategy === "snowball" ? "Bola de Nieve" : "Avalancha";
+    
     const planHTML = `
       <div class="card" style="background: #f0f9ff; padding: 20px; border-radius: 10px; margin-top: 15px;">
-        <h4 style="color: #333 !important;">📋 Plan de Pago (${strategy === "snowball" ? "Bola de Nieve" : "Avalancha"})</h4>
-        <ol style="margin-top: 15px;">
-          ${sortedDebts
-            .map(
-              (debt, index) => `
-            <li style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 5px; color: #333;">
-              <strong style="color: #333 !important;">${debt.name}</strong> - 
-              Monto: $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} | 
-              Interés: ${debt.interest}% | 
-              Pago Mínimo: $${debt.minPayment.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
-            </li>
-          `
-            )
-            .join("")}
-        </ol>
-        <p style="margin-top: 15px; color: #666;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h4 style="color: #333 !important; margin: 0;">📋 Plan de Pago (${strategy === "snowball" ? "Bola de Nieve" : "Avalancha"})</h4>
+          <button onclick="showFullDebtPlan()" style="background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600;">📊 Ver Plan Completo</button>
+        </div>
+        
+        <!-- Comparador de estrategias -->
+        <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #3b82f6;">
+          <p style="color: #333; font-weight: 600; margin: 0 0 10px 0;">💰 Comparación de Estrategias:</p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div style="background: ${strategy === "snowball" ? "#dbeafe" : "#f3f4f6"}; padding: 10px; border-radius: 5px;">
+              <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">❄️ Bola de Nieve</p>
+              <p style="color: #333; font-size: 16px; font-weight: bold; margin: 0;">Ahorro: $${savings.snowball.toFixed(2)}</p>
+            </div>
+            <div style="background: ${strategy === "avalanche" ? "#dbeafe" : "#f3f4f6"}; padding: 10px; border-radius: 5px;">
+              <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">🏔️ Avalancha</p>
+              <p style="color: #333; font-size: 16px; font-weight: bold; margin: 0;">Ahorro: $${savings.avalanche.toFixed(2)}</p>
+            </div>
+          </div>
+          ${savings[strategy] > savings[otherStrategy] ? `
+            <p style="color: #10b981; font-size: 12px; margin: 10px 0 0 0; font-weight: 600;">
+              ✅ La estrategia actual te ahorraría $${(savings[strategy] - savings[otherStrategy]).toFixed(2)} más que ${otherStrategyName}
+            </p>
+          ` : savings[otherStrategy] > savings[strategy] ? `
+            <p style="color: #f59e0b; font-size: 12px; margin: 10px 0 0 0; font-weight: 600;">
+              💡 ${otherStrategyName} te ahorraría $${(savings[otherStrategy] - savings[strategy]).toFixed(2)} más
+            </p>
+          ` : ''}
+        </div>
+        
+        <!-- Top 3 deudas prioritarias -->
+        <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+          <p style="color: #333; font-weight: 600; margin: 0 0 10px 0;">🎯 Próximas 3 Deudas a Pagar:</p>
+          <ol style="margin: 0; padding-left: 20px;">
+            ${sortedDebts.slice(0, 3)
+              .map(
+                (debt, index) => `
+              <li style="margin-bottom: 8px; color: #333;">
+                <strong style="color: #333 !important;">${index === 0 ? '🔥 ' : ''}${debt.name}</strong> - 
+                $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} 
+                <span style="color: #666; font-size: 12px;">(${debt.reason})</span>
+              </li>
+            `
+              )
+              .join("")}
+          </ol>
+        </div>
+        
+        <!-- Tiempo estimado -->
+        <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+          <p style="color: #333; font-weight: 600; margin: 0 0 5px 0;">⏱️ Tiempo Estimado:</p>
+          <p style="color: #666; margin: 0;">
+            ${timeToPayoff.years > 0 ? `${timeToPayoff.years} año(s) ` : ''}${timeToPayoff.monthsRemainder} mes(es) para pagar todas las deudas
+          </p>
+        </div>
+        
+        <!-- Lista completa -->
+        <details style="margin-top: 15px;">
+          <summary style="cursor: pointer; color: #3b82f6; font-weight: 600; padding: 10px; background: white; border-radius: 5px;">
+            Ver todas las deudas (${sortedDebts.length})
+          </summary>
+          <ol style="margin-top: 10px; padding-left: 20px;">
+            ${sortedDebts
+              .map(
+                (debt, index) => `
+              <li style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 5px; color: #333;">
+                <strong style="color: #333 !important;">${debt.name}</strong> - 
+                Monto: $${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} | 
+                Interés: ${debt.interest || 0}% | 
+                Pago Mínimo: $${(debt.minPayment || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+                <span style="color: #666; font-size: 12px; display: block; margin-top: 5px;">${debt.reason}</span>
+              </li>
+            `
+              )
+              .join("")}
+          </ol>
+        </details>
+        
+        <p style="margin-top: 15px; color: #666; font-size: 13px;">
           <strong style="color: #333 !important;">Estrategia:</strong> ${strategy === "snowball" ? "Paga primero la deuda más pequeña para ganar momentum psicológico" : "Paga primero la deuda con mayor interés para ahorrar más dinero"}
         </p>
       </div>
@@ -5042,6 +5372,199 @@ window.updateDebtStrategy = function () {
 
     document.getElementById("debtPlan").innerHTML = planHTML;
   });
+};
+
+// Mostrar plan completo de deudas en modal
+window.showFullDebtPlan = async function () {
+  if (!currentUser) return;
+  
+  try {
+    showLoading("Calculando plan completo...");
+    const debts = await loadDebts();
+    if (debts.length === 0) {
+      showMessage("No hay deudas para mostrar", "info");
+      return;
+    }
+    
+    const strategy = document.getElementById("debtStrategy")?.value || "snowball";
+    const paymentOrder = calculatePaymentOrder(debts, strategy);
+    const savings = calculateStrategySavings(debts);
+    const timeToPayoff = calculateTimeToPayoff(debts, strategy);
+    const otherStrategy = strategy === "snowball" ? "avalanche" : "snowball";
+    const otherStrategyName = otherStrategy === "snowball" ? "Bola de Nieve" : "Avalancha";
+    const currentStrategyName = strategy === "snowball" ? "Bola de Nieve" : "Avalancha";
+    
+    const planHTML = `
+      <div style="max-height: 70vh; overflow-y: auto;">
+        <div style="background: #f0f9ff; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+          <h3 style="color: #333; margin: 0 0 15px 0;">📋 Plan Completo de Pago - ${currentStrategyName}</h3>
+          
+          <!-- Comparador de estrategias -->
+          <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #3b82f6;">
+            <p style="color: #333; font-weight: 600; margin: 0 0 10px 0;">💰 Comparación de Estrategias:</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+              <div style="background: ${strategy === "snowball" ? "#dbeafe" : "#f3f4f6"}; padding: 15px; border-radius: 5px;">
+                <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">❄️ Bola de Nieve</p>
+                <p style="color: #333; font-size: 18px; font-weight: bold; margin: 0;">Ahorro: $${savings.snowball ? savings.snowball.toFixed(2) : '0.00'}</p>
+                <p style="color: #666; font-size: 11px; margin: 5px 0 0 0;">Tiempo: ${savings.snowballTime ? Math.floor(savings.snowballTime / 12) : 0} año(s) ${savings.snowballTime ? savings.snowballTime % 12 : 0} mes(es)</p>
+              </div>
+              <div style="background: ${strategy === "avalanche" ? "#dbeafe" : "#f3f4f6"}; padding: 15px; border-radius: 5px;">
+                <p style="color: #666; font-size: 12px; margin: 0 0 5px 0;">🏔️ Avalancha</p>
+                <p style="color: #333; font-size: 18px; font-weight: bold; margin: 0;">Ahorro: $${savings.avalanche ? savings.avalanche.toFixed(2) : '0.00'}</p>
+                <p style="color: #666; font-size: 11px; margin: 5px 0 0 0;">Tiempo: ${savings.avalancheTime ? Math.floor(savings.avalancheTime / 12) : 0} año(s) ${savings.avalancheTime ? savings.avalancheTime % 12 : 0} mes(es)</p>
+              </div>
+            </div>
+            ${savings[strategy] && savings[otherStrategy] && savings[strategy] > savings[otherStrategy] ? `
+              <p style="color: #10b981; font-size: 13px; margin: 10px 0 0 0; font-weight: 600;">
+                ✅ ${currentStrategyName} te ahorraría $${(savings[strategy] - savings[otherStrategy]).toFixed(2)} más que ${otherStrategyName}
+              </p>
+            ` : savings[otherStrategy] && savings[strategy] && savings[otherStrategy] > savings[strategy] ? `
+              <p style="color: #f59e0b; font-size: 13px; margin: 10px 0 0 0; font-weight: 600;">
+                💡 ${otherStrategyName} te ahorraría $${(savings[otherStrategy] - savings[strategy]).toFixed(2)} más que ${currentStrategyName}
+              </p>
+            ` : ''}
+          </div>
+          
+          <!-- Simulador de pago extra -->
+          <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #10b981;">
+            <p style="color: #333; font-weight: 600; margin: 0 0 10px 0;">🧮 Simulador de Pago Extra:</p>
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label style="font-size: 12px;">Pago Extra Mensual:</label>
+              <input type="number" id="simulatorExtraPayment" placeholder="0.00" step="0.01" min="0" value="200" style="width: 100%; padding: 8px; border: 2px solid #e5e7eb; border-radius: 5px;" />
+            </div>
+            <button onclick="simulateExtraPayment()" style="width: 100%; background: #10b981; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; font-weight: 600;">
+              📊 Calcular Impacto
+            </button>
+            <div id="simulatorResults" style="margin-top: 15px;"></div>
+          </div>
+          
+          <!-- Lista completa ordenada -->
+          <div style="background: white; padding: 15px; border-radius: 8px;">
+            <p style="color: #333; font-weight: 600; margin: 0 0 15px 0;">📋 Orden Completo de Pago (${paymentOrder.length} deudas):</p>
+            <ol style="margin: 0; padding-left: 20px;">
+              ${paymentOrder.map((debt, index) => {
+                const priorityColor = index === 0 ? '#10b981' : index === 1 ? '#f59e0b' : index === 2 ? '#6366f1' : '#9ca3af';
+                return `
+                  <li style="margin-bottom: 15px; padding: 15px; background: ${index < 3 ? '#f8f9fa' : 'white'}; border-radius: 8px; border-left: 4px solid ${priorityColor};">
+                    <div style="display: flex; align-items: start; gap: 10px;">
+                      <span style="background: ${priorityColor}; color: white; width: 35px; height: 35px; border-radius: 50%; 
+                                    display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; flex-shrink: 0;">
+                        ${index + 1}
+                      </span>
+                      <div style="flex: 1;">
+                        <p style="color: #333; font-weight: 600; margin: 0 0 5px 0; font-size: 16px;">${debt.name}</p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px;">
+                          <div>
+                            <p style="color: #666; font-size: 11px; margin: 0;">Monto Actual</p>
+                            <p style="color: #ef4444; font-weight: bold; margin: 3px 0 0 0;">$${debt.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div>
+                            <p style="color: #666; font-size: 11px; margin: 0;">Interés</p>
+                            <p style="color: #333; font-weight: bold; margin: 3px 0 0 0;">${debt.interest || 0}% anual</p>
+                          </div>
+                          <div>
+                            <p style="color: #666; font-size: 11px; margin: 0;">Pago Mínimo</p>
+                            <p style="color: #333; font-weight: bold; margin: 3px 0 0 0;">$${(debt.minPayment || 0).toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+                          </div>
+                        </div>
+                        <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">${debt.reason}</p>
+                        ${index === 0 ? `
+                          <button onclick="registerPayment('${debt.id}'); closeModal();" 
+                                  style="margin-top: 10px; background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 12px;">
+                            💰 Pagar Ahora
+                          </button>
+                        ` : ''}
+                      </div>
+                    </div>
+                  </li>
+                `;
+              }).join('')}
+            </ol>
+          </div>
+          
+          <!-- Tiempo estimado -->
+          <div style="background: white; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #8b5cf6;">
+            <p style="color: #333; font-weight: 600; margin: 0 0 5px 0;">⏱️ Tiempo Estimado Total:</p>
+            <p style="color: #666; margin: 0;">
+              ${timeToPayoff.years > 0 ? `${timeToPayoff.years} año(s) ` : ''}${timeToPayoff.monthsRemainder} mes(es) para pagar todas las deudas
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById("modalTitle").textContent = "📊 Plan Completo de Pago";
+    document.getElementById("modalBody").innerHTML = planHTML;
+    document.getElementById("detailModal").classList.add("active");
+    
+  } catch (error) {
+    handleError(error, "showFullDebtPlan");
+    showMessage("Error al cargar el plan completo: " + error.message, "error");
+  } finally {
+    hideLoading();
+  }
+};
+
+// Simulador de pago extra
+window.simulateExtraPayment = async function () {
+  if (!currentUser) return;
+  
+  try {
+    const extraPayment = parseFloat(document.getElementById("simulatorExtraPayment").value) || 0;
+    if (extraPayment <= 0) {
+      showMessage("Por favor ingresa un monto válido", "error");
+      return;
+    }
+    
+    const debts = await loadDebts();
+    if (debts.length === 0) {
+      showMessage("No hay deudas para simular", "info");
+      return;
+    }
+    
+    const strategy = document.getElementById("debtStrategy")?.value || "snowball";
+    const timeWithExtra = calculateTimeToPayoff(debts, strategy, extraPayment);
+    const timeWithoutExtra = calculateTimeToPayoff(debts, strategy, 0);
+    
+    const monthsSaved = timeWithoutExtra.months - timeWithExtra.months;
+    const yearsSaved = Math.floor(monthsSaved / 12);
+    const monthsRemainder = monthsSaved % 12;
+    
+    const resultsHTML = `
+      <div style="background: #d1fae5; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981;">
+        <p style="color: #065f46; font-weight: 600; margin: 0 0 10px 0;">📊 Resultados de la Simulación:</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <p style="color: #047857; font-size: 12px; margin: 0;">Sin Pago Extra</p>
+            <p style="color: #065f46; font-size: 16px; font-weight: bold; margin: 5px 0 0 0;">
+              ${timeWithoutExtra.years} año(s) ${timeWithoutExtra.monthsRemainder} mes(es)
+            </p>
+          </div>
+          <div>
+            <p style="color: #047857; font-size: 12px; margin: 0;">Con $${extraPayment.toFixed(2)} Extra</p>
+            <p style="color: #065f46; font-size: 16px; font-weight: bold; margin: 5px 0 0 0;">
+              ${timeWithExtra.years} año(s) ${timeWithExtra.monthsRemainder} mes(es)
+            </p>
+          </div>
+        </div>
+        ${monthsSaved > 0 ? `
+          <p style="color: #065f46; font-size: 14px; margin: 15px 0 0 0; font-weight: 600;">
+            ✅ Ahorrarías ${yearsSaved > 0 ? `${yearsSaved} año(s) ` : ''}${monthsRemainder} mes(es) pagando $${extraPayment.toFixed(2)} extra cada mes
+          </p>
+        ` : `
+          <p style="color: #92400e; font-size: 14px; margin: 15px 0 0 0;">
+            ⚠️ El pago extra no reduce significativamente el tiempo
+          </p>
+        `}
+      </div>
+    `;
+    
+    document.getElementById("simulatorResults").innerHTML = resultsHTML;
+    
+  } catch (error) {
+    handleError(error, "simulateExtraPayment");
+    showMessage("Error al simular: " + error.message, "error");
+  }
 };
 
 // ============= INVERSIONES =============
