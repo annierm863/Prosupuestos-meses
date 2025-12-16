@@ -3027,6 +3027,309 @@ window.deleteGoal = async function (id) {
   });
 };
 
+// ============= SISTEMA DE TRANSACCIONES DE METAS =============
+// Funciones para registrar y obtener transacciones de metas (Fase 2)
+
+/**
+ * Registra una transacción de meta (pago, aporte, retiro, ajuste)
+ */
+async function recordGoalTransaction(goalId, type, amount, date, notes = "", debtId = null, debtPaymentId = null, weekId = null) {
+  if (!currentUser || !goalId) return null;
+  
+  try {
+    const transactionData = {
+      userId: currentUser.uid,
+      goalId: goalId,
+      type: type, // "debt_payment" | "savings_contribution" | "withdrawal" | "adjustment"
+      amount: parseFloat(amount),
+      date: date,
+      notes: notes.trim(),
+      createdAt: Timestamp.now()
+    };
+    
+    // Si es pago de deuda, agregar referencias
+    if (type === "debt_payment" && debtId) {
+      transactionData.debtId = debtId;
+      if (debtPaymentId) {
+        transactionData.debtPaymentId = debtPaymentId;
+      }
+    }
+    
+    // Si tiene weekId, agregarlo
+    if (weekId) {
+      transactionData.weekId = weekId;
+    }
+    
+    const docRef = await addDoc(collection(db, "goalTransactions"), transactionData);
+    
+    // Limpiar caché de transacciones para esta meta
+    cache.clear("goalTransactions", goalId);
+    
+    return { id: docRef.id, ...transactionData };
+  } catch (error) {
+    console.error("Error registrando transacción de meta:", error);
+    throw error;
+  }
+}
+
+/**
+ * Obtiene las transacciones de una meta
+ */
+async function getGoalTransactions(goalId, weeks = null) {
+  if (!currentUser || !goalId) return [];
+  
+  try {
+    // Verificar caché
+    const cacheKey = weeks ? `goalTransactions_${goalId}_${weeks}w` : `goalTransactions_${goalId}`;
+    const cached = cache.get("goalTransactions", cacheKey);
+    if (cached) return cached;
+    
+    const q = query(
+      collection(db, "goalTransactions"),
+      where("goalId", "==", goalId),
+      where("userId", "==", currentUser.uid),
+      orderBy("date", "desc")
+    );
+    
+    const snapshot = await getDocs(q);
+    const transactions = [];
+    
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      transactions.push({ 
+        id: doc.id, 
+        ...data,
+        date: data.date || (data.createdAt?.toDate ? data.createdAt.toDate().toISOString().split("T")[0] : null)
+      });
+    });
+    
+    // Filtrar por semanas si se especifica
+    let filteredTransactions = transactions;
+    if (weeks && weeks > 0) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - (weeks * 7));
+      filteredTransactions = transactions.filter(t => {
+        const transDate = new Date(t.date);
+        return transDate >= cutoffDate;
+      });
+    }
+    
+    cache.set("goalTransactions", filteredTransactions, cacheKey);
+    return filteredTransactions;
+  } catch (error) {
+    console.error("Error obteniendo transacciones de meta:", error);
+    return [];
+  }
+}
+
+/**
+ * Calcula el ritmo actual de una meta (promedio por semana o mes)
+ */
+async function calculateGoalRitmo(goalId, period = 'week') {
+  if (!goalId) return 0;
+  
+  try {
+    // Obtener transacciones de las últimas 4 semanas
+    const transactions = await getGoalTransactions(goalId, 4);
+    
+    if (transactions.length === 0) return 0;
+    
+    // Filtrar solo aportes/pagos (no retiros ni ajustes)
+    const positiveTransactions = transactions.filter(t => 
+      t.type === "debt_payment" || t.type === "savings_contribution"
+    );
+    
+    if (positiveTransactions.length === 0) return 0;
+    
+    const total = positiveTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const weeks = period === 'week' ? 4 : (4 / 4.33); // Aproximación mensual
+    
+    return total / weeks;
+  } catch (error) {
+    console.error("Error calculando ritmo de meta:", error);
+    return 0;
+  }
+}
+
+/**
+ * Actualiza el progreso de una meta basado en transacciones
+ */
+async function updateGoalProgressFromTransactions(goalId) {
+  if (!currentUser || !goalId) return;
+  
+  try {
+    const transactions = await getGoalTransactions(goalId);
+    
+    // Calcular current basado en transacciones
+    let totalProgress = 0;
+    transactions.forEach(t => {
+      if (t.type === "debt_payment" || t.type === "savings_contribution") {
+        totalProgress += Math.abs(t.amount);
+      } else if (t.type === "withdrawal") {
+        totalProgress -= Math.abs(t.amount);
+      }
+      // "adjustment" no se cuenta aquí, se maneja manualmente
+    });
+    
+    // Obtener la meta para verificar el target
+    const goalDoc = await getDoc(doc(db, "goals", goalId));
+    if (goalDoc.exists()) {
+      const goal = goalDoc.data();
+      
+      // Solo actualizar si hay diferencia significativa (más de $0.01)
+      if (Math.abs(totalProgress - (goal.current || 0)) > 0.01) {
+        await updateDoc(doc(db, "goals", goalId), {
+          current: Math.max(0, totalProgress),
+          updatedAt: Timestamp.now()
+        });
+        cache.clear("goals");
+      }
+    }
+  } catch (error) {
+    console.error("Error actualizando progreso de meta:", error);
+  }
+}
+
+/**
+ * Registra un aporte manual a una meta de ahorro
+ */
+async function recordManualContribution(goalId, amount, date, notes = "") {
+  if (!currentUser || !goalId) return null;
+  
+  try {
+    // Registrar transacción
+    const transaction = await recordGoalTransaction(
+      goalId,
+      "savings_contribution",
+      amount,
+      date,
+      notes || "Aporte manual",
+      null,
+      null,
+      currentWeek?.id || null
+    );
+    
+    // Actualizar progreso de la meta
+    const goalDoc = await getDoc(doc(db, "goals", goalId));
+    if (goalDoc.exists()) {
+      const goal = goalDoc.data();
+      const newCurrent = (goal.current || 0) + amount;
+      
+      await updateDoc(doc(db, "goals", goalId), {
+        current: newCurrent,
+        updatedAt: Timestamp.now()
+      });
+      cache.clear("goals");
+    }
+    
+    return transaction;
+  } catch (error) {
+    console.error("Error registrando aporte manual:", error);
+    throw error;
+  }
+}
+
+/**
+ * Registra un retiro de una meta de ahorro
+ */
+async function recordManualWithdrawal(goalId, amount, date, notes = "") {
+  if (!currentUser || !goalId) return null;
+  
+  try {
+    // Validar que haya suficiente en la meta
+    const goalDoc = await getDoc(doc(db, "goals", goalId));
+    if (!goalDoc.exists()) {
+      throw new Error("Meta no encontrada");
+    }
+    
+    const goal = goalDoc.data();
+    const current = goal.current || 0;
+    
+    if (amount > current) {
+      throw new Error(`No puedes retirar $${amount.toFixed(2)}. Solo tienes $${current.toFixed(2)} disponible.`);
+    }
+    
+    // Registrar transacción
+    const transaction = await recordGoalTransaction(
+      goalId,
+      "withdrawal",
+      amount,
+      date,
+      notes || "Retiro manual",
+      null,
+      null,
+      currentWeek?.id || null
+    );
+    
+    // Actualizar progreso de la meta
+    const newCurrent = Math.max(0, current - amount);
+    
+    await updateDoc(doc(db, "goals", goalId), {
+      current: newCurrent,
+      updatedAt: Timestamp.now()
+    });
+    cache.clear("goals");
+    
+    return transaction;
+  } catch (error) {
+    console.error("Error registrando retiro manual:", error);
+    throw error;
+  }
+}
+
+/**
+ * Calcula proyección de fecha de finalización basado en ritmo actual
+ */
+async function calculateGoalProjection(goalId) {
+  if (!goalId) return null;
+  
+  try {
+    const goalDoc = await getDoc(doc(db, "goals", goalId));
+    if (!goalDoc.exists()) return null;
+    
+    const goal = { id: goalDoc.id, ...goalDoc.data() };
+    const ritmo = await calculateGoalRitmo(goalId, 'week');
+    const remaining = goal.target - (goal.current || 0);
+    
+    if (ritmo <= 0) {
+      return { 
+        message: "No hay actividad reciente. Necesitas empezar a aportar para alcanzar tu meta.",
+        estimatedDate: null,
+        daysDifference: null,
+        ritmo: 0
+      };
+    }
+    
+    const weeksNeeded = remaining / ritmo;
+    const estimatedDate = new Date();
+    estimatedDate.setDate(estimatedDate.getDate() + (weeksNeeded * 7));
+    
+    const deadlineDate = new Date(goal.deadline);
+    const daysDifference = Math.ceil((estimatedDate - deadlineDate) / (1000 * 60 * 60 * 24));
+    
+    let message = "";
+    if (daysDifference > 0) {
+      message = `Si sigues a este ritmo ($${ritmo.toFixed(2)}/semana), terminarías ${daysDifference} día(s) después de la fecha límite`;
+    } else if (daysDifference < 0) {
+      message = `Si sigues a este ritmo ($${ritmo.toFixed(2)}/semana), terminarías ${Math.abs(daysDifference)} día(s) antes de la fecha límite`;
+    } else {
+      message = `Si sigues a este ritmo ($${ritmo.toFixed(2)}/semana), terminarías justo en la fecha límite`;
+    }
+    
+    return {
+      message: message,
+      estimatedDate: estimatedDate,
+      daysDifference: daysDifference,
+      ritmo: ritmo,
+      weeksNeeded: weeksNeeded,
+      onTime: daysDifference <= 0
+    };
+  } catch (error) {
+    console.error("Error calculando proyección de meta:", error);
+    return null;
+  }
+}
+
 // ============= FUNCIONES HELPER PARA METAS EXTENDIDAS =============
 // Estas funciones extienden las metas existentes sin modificar los datos originales
 
@@ -3475,6 +3778,24 @@ window.handleWeeklyAction = async function (actionType, goalId, amount, debtId) 
           current: newCurrent,
           updatedAt: Timestamp.now()
         });
+        
+        // Registrar transacción de meta (Fase 2)
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          await recordGoalTransaction(
+            goalId,
+            "savings_contribution",
+            amount,
+            today,
+            `Aporte desde plan semanal: ${goal.name}`,
+            null,
+            null,
+            currentWeek?.id || null
+          );
+        } catch (transError) {
+          console.warn("Error registrando transacción de meta:", transError);
+          // No fallar el aporte si hay error en la transacción
+        }
         
         cache.clear("goals");
         await loadGoals();
@@ -5308,6 +5629,26 @@ window.confirmPayment = async function () {
 
     cache.clear("liabilities");
     
+    // Obtener el ID del pago recién creado (necesitamos hacer una consulta)
+    let paymentDocId = null;
+    try {
+      const paymentQuery = query(
+        collection(db, "debtPayments"),
+        where("debtId", "==", currentPaymentDebtId),
+        where("userId", "==", currentUser.uid),
+        where("amount", "==", amount),
+        where("date", "==", paymentDate),
+        orderBy("createdAt", "desc"),
+        limit(1)
+      );
+      const paymentSnapshot = await getDocs(paymentQuery);
+      if (!paymentSnapshot.empty) {
+        paymentDocId = paymentSnapshot.docs[0].id;
+      }
+    } catch (queryError) {
+      console.warn("No se pudo obtener ID del pago para transacción:", queryError);
+    }
+    
     // Sincronizar con meta si existe (nueva funcionalidad)
     try {
       const goals = await getGoals();
@@ -5324,6 +5665,23 @@ window.confirmPayment = async function () {
             updatedAt: Timestamp.now()
           });
           cache.clear("goals");
+          
+          // Registrar transacción de meta (Fase 2)
+          try {
+            await recordGoalTransaction(
+              linkedGoal.id,
+              "debt_payment",
+              amount,
+              paymentDate,
+              `Pago de deuda: ${debt.name || 'Deuda'}`,
+              currentPaymentDebtId,
+              paymentDocId,
+              currentWeek?.id || null
+            );
+          } catch (transError) {
+            console.warn("Error registrando transacción de meta:", transError);
+            // No fallar el pago si hay error en la transacción
+          }
         }
       }
     } catch (syncError) {
