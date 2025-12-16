@@ -34,6 +34,40 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// ============= FUNCIONES DE AUTENTICACIÓN (Definidas temprano para disponibilidad inmediata) =============
+// Definir login inmediatamente para que esté disponible cuando se carga el HTML
+window.login = async function () {
+  const email = document.getElementById("authEmail")?.value;
+  const password = document.getElementById("authPassword")?.value;
+
+  if (!email || !password) {
+    const messageDiv = document.getElementById("authMessage");
+    if (messageDiv) {
+      messageDiv.className = "alert alert-warning";
+      messageDiv.textContent = "Por favor completa todos los campos";
+      messageDiv.style.display = "block";
+    }
+    return;
+  }
+
+  try {
+    // Mostrar loading si existe
+    const loadingEl = document.getElementById("loading");
+    if (loadingEl) loadingEl.style.display = "flex";
+    
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (error) {
+    const messageDiv = document.getElementById("authMessage");
+    if (messageDiv) {
+      messageDiv.className = "alert alert-warning";
+      messageDiv.textContent = "Error: " + (error.message || "Error al iniciar sesión");
+      messageDiv.style.display = "block";
+    }
+    const loadingEl = document.getElementById("loading");
+    if (loadingEl) loadingEl.style.display = "none";
+  }
+};
+
 // ============= SEGURIDAD: Variables globales expuestas =============
 // NOTA: Estas variables están expuestas para compatibilidad, pero deberían
 // ser privadas en producción. Las reglas de Firestore deben proteger los datos.
@@ -414,40 +448,85 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
-// ============= FUNCIONES DE AUTENTICACIÓN =============
+// ============= FUNCIONES DE AUTENTICACIÓN (Versión completa con validación) =============
+// Reemplazar la función login básica con la versión completa una vez que todas las funciones estén disponibles
+(function() {
+  // Guardar referencia a la función básica
+  const basicLogin = window.login;
+  
+  // Reemplazar con la versión completa cuando todo esté listo
+  setTimeout(() => {
+    window.login = async function () {
+      const email = document.getElementById("authEmail")?.value;
+      const password = document.getElementById("authPassword")?.value;
+
+      if (!email || !password) {
+        if (typeof showAuthMessage === 'function') {
+          showAuthMessage("Por favor completa todos los campos", "warning");
+        } else {
+          const messageDiv = document.getElementById("authMessage");
+          if (messageDiv) {
+            messageDiv.className = "alert alert-warning";
+            messageDiv.textContent = "Por favor completa todos los campos";
+            messageDiv.style.display = "block";
+          }
+        }
+        return;
+      }
+
+      // Si validateForm está disponible, usarla
+      if (typeof validateForm === 'function') {
+        const errors = validateForm(
+          { email, password },
+          {
+            email: { required: true, type: "email", label: "Email" },
+            password: { required: true, label: "Contraseña" },
+          }
+        );
+
+        if (errors.length > 0) {
+          if (typeof showAuthMessage === 'function') {
+            showAuthMessage(errors.join(", "), "warning");
+          }
+          return;
+        }
+      }
+
+      try {
+        if (typeof showLoading === 'function') {
+          showLoading("Iniciando sesión...");
+        }
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (error) {
+        if (typeof showAuthMessage === 'function') {
+          showAuthMessage("Error: " + (typeof getSpanishError === 'function' ? getSpanishError(error.code) : error.message), "warning");
+        } else {
+          const messageDiv = document.getElementById("authMessage");
+          if (messageDiv) {
+            messageDiv.className = "alert alert-warning";
+            messageDiv.textContent = "Error: " + error.message;
+            messageDiv.style.display = "block";
+          }
+        }
+      } finally {
+        if (typeof hideLoading === 'function') {
+          hideLoading();
+        }
+      }
+    };
+  }, 100);
+})();
+
 // ============= REGISTRO DESHABILITADO - SOLO ADMIN =============
 // El registro público ha sido deshabilitado por seguridad.
 // Solo el administrador puede crear nuevas cuentas desde Firebase Console.
 window.register = async function () {
-  showAuthMessage("⚠️ El registro está deshabilitado. Contacta al administrador para crear una cuenta.", "warning");
+  if (typeof showAuthMessage === 'function') {
+    showAuthMessage("⚠️ El registro está deshabilitado. Contacta al administrador para crear una cuenta.", "warning");
+  } else {
+    alert("⚠️ El registro está deshabilitado. Contacta al administrador para crear una cuenta.");
+  }
   return;
-};
-
-window.login = async function () {
-  const email = document.getElementById("authEmail").value;
-  const password = document.getElementById("authPassword").value;
-
-  const errors = validateForm(
-    { email, password },
-    {
-      email: { required: true, type: "email", label: "Email" },
-      password: { required: true, label: "Contraseña" },
-    }
-  );
-
-  if (errors.length > 0) {
-    showAuthMessage(errors.join(", "), "warning");
-    return;
-  }
-
-  try {
-    showLoading("Iniciando sesión...");
-    await signInWithEmailAndPassword(auth, email, password);
-  } catch (error) {
-    showAuthMessage("Error: " + getSpanishError(error.code), "warning");
-  } finally {
-    hideLoading();
-  }
 };
 
 window.logout = async function () {
