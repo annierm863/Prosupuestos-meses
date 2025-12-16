@@ -2768,7 +2768,7 @@ async function loadGoals() {
   // Verificar caché
   const cached = cache.get("goals");
   if (cached) {
-    displayGoals(cached);
+    await displayGoals(cached);
     return cached; // Retornar el array en caché
   }
 
@@ -2785,7 +2785,7 @@ async function loadGoals() {
     });
 
     cache.set("goals", goals);
-    displayGoals(goals);
+    await displayGoals(goals);
     return goals; // Retornar el array
   } catch (error) {
     showMessage("Error al cargar metas: " + error.message, "error");
@@ -2826,7 +2826,7 @@ async function getGoals() {
   }
 }
 
-function displayGoals(goals) {
+async function displayGoals(goals) {
   const container = document.getElementById("goalsList");
 
   if (goals.length === 0) {
@@ -2842,10 +2842,20 @@ function displayGoals(goals) {
   // Enriquecer metas con cálculos (compatible con metas existentes)
   const enrichedGoals = enrichGoalsWithCalculations(goals);
 
-  container.innerHTML = enrichedGoals
+  // Calcular ritmo y proyección para cada meta (Fase 3)
+  const goalsWithRitmo = await Promise.all(
+    enrichedGoals.map(async (goal) => {
+      const ritmo = await calculateGoalRitmo(goal.id, 'week');
+      const projection = await calculateGoalProjection(goal.id);
+      return { ...goal, ritmo, projection };
+    })
+  );
+
+  container.innerHTML = goalsWithRitmo
     .map((goal) => {
       const progress = ((goal.current / goal.target) * 100).toFixed(1);
       const daysLeft = Math.ceil((new Date(goal.deadline) - new Date()) / (1000 * 60 * 60 * 24));
+      const remaining = Math.max(0, goal.target - (goal.current || 0));
       
       // Determinar color del badge de status
       let statusBadge = "";
@@ -2866,37 +2876,93 @@ function displayGoals(goals) {
         }
       }
       
-      // Información adicional (si está disponible)
-      const additionalInfo = goal.weeklyTarget ? `
-        <div style="margin-top: 8px; padding: 8px; background: #f8f9fa; border-radius: 5px; font-size: 12px;">
-          📊 Esta semana: $${goal.weeklyTarget.toFixed(2)} • Mensual: $${goal.monthlyTarget ? goal.monthlyTarget.toFixed(2) : (goal.weeklyTarget * 4.33).toFixed(2)}
-        </div>
-      ` : "";
+      // Calcular requerido por semana/mes
+      const weeksRemaining = Math.max(1, Math.ceil(daysLeft / 7));
+      const requiredWeekly = remaining > 0 && daysLeft > 0 ? remaining / weeksRemaining : 0;
+      const requiredMonthly = requiredWeekly * 4.33;
+      
+      // Ritmo actual (promedio real)
+      const ritmoWeekly = goal.ritmo || 0;
+      const ritmoMonthly = ritmoWeekly * 4.33;
+      
+      // CTA según tipo de meta
+      let primaryCTA = "";
+      if (goal.status === "COMPLETADA") {
+        primaryCTA = '<button class="btn-small" style="background: #6366f1; color: white; width: 100%;" disabled>✅ Completada</button>';
+      } else if (goal.type === "debt" && goal.linkedDebtId) {
+        primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="registerPayment('${goal.linkedDebtId}')">💰 Registrar Pago</button>`;
+      } else if (goal.type === "compound") {
+        primaryCTA = `<button class="btn-small" style="background: #3b82f6; color: white; width: 100%;" onclick="showGoalDetails('${goal.id}')">📋 Ver Plan</button>`;
+      } else {
+        primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="showContributionModal('${goal.id}')">💰 Registrar Aporte</button>`;
+      }
 
       return `
-        <div class="list-item" style="--item-color: ${statusColor}; flex-direction: column; align-items: flex-start; border-left: 4px solid ${statusColor};">
-          <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <div class="list-item" style="--item-color: ${statusColor}; flex-direction: column; align-items: flex-start; border-left: 4px solid ${statusColor}; padding: 15px; margin-bottom: 15px;">
+          <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 12px; align-items: flex-start;">
             <div style="flex: 1;">
-              <div class="list-item-title" style="display: flex; align-items: center;">
-                ${goal.type === "debt" ? "💳" : "🎯"} ${goal.name}
+              <div class="list-item-title" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                <span>${goal.type === "debt" ? "💳" : goal.type === "compound" ? "🎯" : "💰"} ${goal.name}</span>
                 ${statusBadge}
               </div>
-              <div class="list-item-details">
-                Meta: $${goal.target.toFixed(2)} • Actual: $${goal.current.toFixed(2)}
-                <br>📅 ${daysLeft} días restantes
+              
+              <!-- Información principal -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div style="background: #f8f9fa; padding: 10px; border-radius: 8px;">
+                  <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Progreso</div>
+                  <div style="font-size: 18px; font-weight: bold; color: ${statusColor};">${progress}%</div>
+                </div>
+                <div style="background: #f8f9fa; padding: 10px; border-radius: 8px;">
+                  <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Falta</div>
+                  <div style="font-size: 18px; font-weight: bold; color: #333;">$${remaining.toFixed(2)}</div>
+                </div>
               </div>
-              ${additionalInfo}
-            </div>
-            <div style="display: flex; gap: 5px; flex-shrink: 0;">
-              <button class="btn-small" style="background: #3b82f6; color: white;" onclick="editGoal('${goal.id}')">✏️ Editar</button>
-              <button class="btn-small btn-danger" onclick="deleteGoal('${goal.id}')">🗑️</button>
+              
+              <!-- Información detallada -->
+              <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div>
+                    <span style="color: #666;">📅 Días restantes:</span>
+                    <strong style="color: #333; margin-left: 4px;">${daysLeft > 0 ? daysLeft : 0}</strong>
+                  </div>
+                  <div>
+                    <span style="color: #666;">📊 Requerido/semana:</span>
+                    <strong style="color: #333; margin-left: 4px;">$${requiredWeekly.toFixed(2)}</strong>
+                  </div>
+                  <div>
+                    <span style="color: #666;">📈 Requerido/mes:</span>
+                    <strong style="color: #333; margin-left: 4px;">$${requiredMonthly.toFixed(2)}</strong>
+                  </div>
+                  <div>
+                    <span style="color: #666;">⚡ Ritmo actual/semana:</span>
+                    <strong style="color: ${ritmoWeekly >= requiredWeekly ? '#10b981' : ritmoWeekly >= requiredWeekly * 0.5 ? '#f59e0b' : '#ef4444'}; margin-left: 4px;">
+                      $${ritmoWeekly.toFixed(2)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Proyección si está disponible -->
+              ${goal.projection && goal.projection.message ? `
+                <div style="background: ${goal.projection.onTime ? '#d1fae5' : '#fee2e2'}; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 11px; color: ${goal.projection.onTime ? '#065f46' : '#991b1b'};">
+                  📊 ${goal.projection.message}
+                </div>
+              ` : ''}
             </div>
           </div>
-          <div style="width: 100%;">
-            <div class="progress-bar">
-              <div class="progress-fill" style="width: ${Math.min(progress, 100)}%; background: ${statusColor};"></div>
+          
+          <!-- Barra de progreso -->
+          <div style="width: 100%; margin-bottom: 12px;">
+            <div class="progress-bar" style="height: 12px; border-radius: 6px; overflow: hidden; background: #e5e7eb;">
+              <div class="progress-fill" style="width: ${Math.min(progress, 100)}%; background: ${statusColor}; height: 100%; transition: width 0.3s ease;"></div>
             </div>
-            <p style="text-align: center; margin-top: 5px; font-weight: 600; color: ${statusColor};">${progress}%</p>
+          </div>
+          
+          <!-- Botones de acción -->
+          <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px; width: 100%;">
+            ${primaryCTA}
+            <button class="btn-small" style="background: #3b82f6; color: white;" onclick="editGoal('${goal.id}')">✏️</button>
+            <button class="btn-small btn-danger" onclick="deleteGoal('${goal.id}')">🗑️</button>
           </div>
         </div>
       `;
@@ -3026,6 +3092,229 @@ window.deleteGoal = async function (id) {
     }
   });
 };
+
+// ============= FUNCIONES PARA CTAs DE METAS (Fase 3) =============
+
+/**
+ * Muestra modal para registrar aporte a meta de ahorro
+ */
+window.showContributionModal = async function (goalId) {
+  if (!currentUser || !goalId) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  try {
+    const goalDoc = await getDoc(doc(db, "goals", goalId));
+    if (!goalDoc.exists()) {
+      showMessage("Meta no encontrada", "error");
+      return;
+    }
+
+    const goal = { id: goalDoc.id, ...goalDoc.data() };
+    const remaining = Math.max(0, goal.target - (goal.current || 0));
+
+    if (remaining <= 0) {
+      showMessage("Esta meta ya está completada", "info");
+      return;
+    }
+
+    // Usar inputModal para obtener el monto
+    showInputModal(
+      `Registrar Aporte a "${goal.name}"`,
+      `Monto a aportar (Falta: $${remaining.toFixed(2)}):`,
+      "",
+      async (amountStr) => {
+        if (!amountStr) return;
+
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+          showMessage("Por favor ingresa un monto válido", "error");
+          return;
+        }
+
+        if (amount > remaining) {
+          showMessage(`No puedes aportar más de $${remaining.toFixed(2)}. La meta solo necesita $${remaining.toFixed(2)}.`, "warning");
+          return;
+        }
+
+        try {
+          showLoading("Registrando aporte...");
+          const today = new Date().toISOString().split("T")[0];
+          await recordManualContribution(goalId, amount, today, `Aporte manual a ${goal.name}`);
+          
+          cache.clear("goals");
+          await loadGoals();
+          showMessage(`✅ Aporte de $${amount.toFixed(2)} registrado exitosamente`, "success");
+        } catch (error) {
+          showMessage("Error al registrar aporte: " + error.message, "error");
+          console.error("Error en showContributionModal:", error);
+        } finally {
+          hideLoading();
+        }
+      }
+    );
+  } catch (error) {
+    showMessage("Error al cargar meta: " + error.message, "error");
+    console.error("Error en showContributionModal:", error);
+  }
+};
+
+/**
+ * Muestra detalles de una meta compuesta
+ */
+window.showGoalDetails = async function (goalId) {
+  if (!currentUser || !goalId) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  try {
+    showLoading("Cargando detalles...");
+    
+    const goalDoc = await getDoc(doc(db, "goals", goalId));
+    if (!goalDoc.exists()) {
+      showMessage("Meta no encontrada", "error");
+      return;
+    }
+
+    const goal = { id: goalDoc.id, ...goalDoc.data() };
+    
+    // Si no es compuesta, mostrar mensaje
+    if (goal.type !== "compound") {
+      showMessage("Esta función solo está disponible para metas compuestas", "info");
+      return;
+    }
+
+    // Obtener transacciones
+    const transactions = await getGoalTransactions(goalId);
+    const projection = await calculateGoalProjection(goalId);
+    const ritmo = await calculateGoalRitmo(goalId, 'week');
+
+    // Obtener metas relacionadas si existen
+    const allGoals = await getGoals();
+    const relatedGoals = allGoals.filter(g => 
+      (g.type === "debt" && goal.linkedDebtIds?.includes(g.linkedDebtId)) ||
+      (g.type === "savings" && goal.linkedSavingsGoalIds?.includes(g.id))
+    );
+
+    // Crear modal de detalles
+    const modalHTML = `
+      <div class="modal active" id="goalDetailsModal">
+        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+          <div class="modal-header">
+            <h3>📋 Detalles de Meta: ${goal.name}</h3>
+            <button class="close-modal" onclick="closeGoalDetailsModal()">×</button>
+          </div>
+          <div style="padding: 20px;">
+            <!-- Información general -->
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+              <h4 style="margin: 0 0 10px 0; color: #333;">Información General</h4>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">
+                <div><strong>Progreso:</strong> ${((goal.current || 0) / goal.target * 100).toFixed(1)}%</div>
+                <div><strong>Falta:</strong> $${Math.max(0, goal.target - (goal.current || 0)).toFixed(2)}</div>
+                <div><strong>Fecha límite:</strong> ${new Date(goal.deadline).toLocaleDateString('es-ES')}</div>
+                <div><strong>Ritmo actual:</strong> $${ritmo.toFixed(2)}/semana</div>
+              </div>
+            </div>
+
+            <!-- Proyección -->
+            ${projection && projection.message ? `
+              <div style="background: ${projection.onTime ? '#d1fae5' : '#fee2e2'}; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 10px 0; color: ${projection.onTime ? '#065f46' : '#991b1b'};">📊 Proyección</h4>
+                <p style="margin: 0; color: ${projection.onTime ? '#065f46' : '#991b1b'};">${projection.message}</p>
+              </div>
+            ` : ''}
+
+            <!-- Metas relacionadas -->
+            ${relatedGoals.length > 0 ? `
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 10px 0; color: #333;">Metas Componentes</h4>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  ${relatedGoals.map(g => `
+                    <div style="background: white; padding: 10px; border-radius: 5px;">
+                      <strong>${g.name}</strong> - ${((g.current || 0) / g.target * 100).toFixed(1)}%
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+
+            <!-- Historial de transacciones -->
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">
+              <h4 style="margin: 0 0 10px 0; color: #333;">Historial de Transacciones</h4>
+              ${transactions.length > 0 ? `
+                <div style="max-height: 300px; overflow-y: auto;">
+                  <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <thead>
+                      <tr style="background: white; border-bottom: 2px solid #e5e7eb;">
+                        <th style="padding: 8px; text-align: left;">Fecha</th>
+                        <th style="padding: 8px; text-align: left;">Tipo</th>
+                        <th style="padding: 8px; text-align: right;">Monto</th>
+                        <th style="padding: 8px; text-align: left;">Notas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${transactions.map(t => `
+                        <tr style="border-bottom: 1px solid #e5e7eb;">
+                          <td style="padding: 8px;">${new Date(t.date).toLocaleDateString('es-ES')}</td>
+                          <td style="padding: 8px;">
+                            ${t.type === "debt_payment" ? "💳 Pago" : 
+                              t.type === "savings_contribution" ? "💰 Aporte" : 
+                              t.type === "withdrawal" ? "💸 Retiro" : "⚙️ Ajuste"}
+                          </td>
+                          <td style="padding: 8px; text-align: right; font-weight: 600; color: ${t.type === "withdrawal" ? "#ef4444" : "#10b981"}">
+                            ${t.type === "withdrawal" ? "-" : "+"}$${Math.abs(t.amount).toFixed(2)}
+                          </td>
+                          <td style="padding: 8px; color: #666;">${t.notes || "-"}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              ` : `
+                <p style="color: #666; margin: 0;">No hay transacciones registradas aún.</p>
+              `}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Agregar modal al DOM
+    const existingModal = document.getElementById("goalDetailsModal");
+    if (existingModal) {
+      existingModal.remove();
+    }
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+  } catch (error) {
+    showMessage("Error al cargar detalles: " + error.message, "error");
+    console.error("Error en showGoalDetails:", error);
+  } finally {
+    hideLoading();
+  }
+};
+
+/**
+ * Cierra el modal de detalles de meta
+ */
+window.closeGoalDetailsModal = function () {
+  const modal = document.getElementById("goalDetailsModal");
+  if (modal) {
+    modal.remove();
+  }
+};
+
+/**
+ * Función helper para escapar HTML (seguridad)
+ */
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 // ============= SISTEMA DE TRANSACCIONES DE METAS =============
 // Funciones para registrar y obtener transacciones de metas (Fase 2)
