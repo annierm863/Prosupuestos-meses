@@ -2535,7 +2535,7 @@ async function loadGoals() {
   const cached = cache.get("goals");
   if (cached) {
     displayGoals(cached);
-    return;
+    return cached; // Retornar el array en caché
   }
 
   try {
@@ -2552,9 +2552,43 @@ async function loadGoals() {
 
     cache.set("goals", goals);
     displayGoals(goals);
+    return goals; // Retornar el array
   } catch (error) {
     showMessage("Error al cargar metas: " + error.message, "error");
     console.error("Error en loadGoals:", error);
+    return []; // Retornar array vacío en caso de error
+  }
+}
+
+/**
+ * Obtiene las metas sin mostrarlas (para uso interno)
+ */
+async function getGoals() {
+  if (!currentUser) return [];
+  
+  // Verificar caché primero
+  const cached = cache.get("goals");
+  if (cached && Array.isArray(cached)) {
+    return cached;
+  }
+
+  try {
+    const q = query(
+      collection(db, "goals"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const goals = [];
+
+    snapshot.forEach((doc) => {
+      goals.push({ id: doc.id, ...doc.data() });
+    });
+
+    cache.set("goals", goals);
+    return goals;
+  } catch (error) {
+    console.error("Error en getGoals:", error);
+    return []; // Retornar array vacío en caso de error
   }
 }
 
@@ -2829,14 +2863,18 @@ function enrichGoalsWithCalculations(goals) {
  * Calcula el excedente semanal y su distribución según la regla 60/40
  */
 async function calculateWeeklySurplus(weekId) {
-  if (!weekId) return null;
+  if (!weekId || !currentUser) return null;
   
   try {
     const incomes = await getWeekData("incomes", weekId);
     const expenses = await getWeekData("expenses", weekId);
     
-    const totalIncome = incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
-    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    // Asegurar que sean arrays
+    const incomesArray = Array.isArray(incomes) ? incomes : [];
+    const expensesArray = Array.isArray(expenses) ? expenses : [];
+    
+    const totalIncome = incomesArray.reduce((sum, i) => sum + (parseFloat(i.amount) || 0), 0);
+    const totalExpenses = expensesArray.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
     
     const surplus = totalIncome - totalExpenses;
     const debtAllocation = surplus > 0 ? surplus * 0.6 : 0;
@@ -2875,7 +2913,11 @@ window.createDebtGoal = async function (debtId) {
     const debt = { id: debtDoc.id, ...debtDoc.data() };
     
     // Verificar si ya existe una meta para esta deuda
-    const existingGoals = await loadGoals();
+    const existingGoals = await getGoals();
+    if (!Array.isArray(existingGoals)) {
+      console.error("getGoals no retornó un array:", existingGoals);
+      return;
+    }
     const existingGoal = existingGoals.find(g => g.linkedDebtId === debtId && g.isActive !== false);
     
     if (existingGoal) {
@@ -2939,7 +2981,11 @@ async function generateWeeklyPlan(weekId) {
       return null; // No hay excedente para planificar
     }
     
-    const goals = await loadGoals();
+    const goals = await getGoals();
+    if (!Array.isArray(goals)) {
+      console.error("getGoals no retornó un array:", goals);
+      return null;
+    }
     const activeGoals = goals.filter(g => g.isActive !== false);
     
     // Separar metas por tipo
@@ -3026,12 +3072,15 @@ async function displayWeeklyPlan() {
   if (!currentWeek) return;
   
   const container = document.getElementById("weeklyPlanPanel");
-  if (!container) return;
+  if (!container) {
+    console.warn("weeklyPlanPanel no encontrado en el DOM");
+    return;
+  }
   
   try {
     const plan = await generateWeeklyPlan(currentWeek.id);
     
-    if (!plan || plan.totalActions === 0) {
+    if (!plan || !plan.surplus || plan.totalActions === 0) {
       container.innerHTML = `
         <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #9ca3af;">
           <h4 style="color: #333; margin: 0 0 10px 0;">📋 Plan de Acción Semanal</h4>
@@ -3041,6 +3090,9 @@ async function displayWeeklyPlan() {
       return;
     }
     
+    // Validar que plan.actions sea un array
+    const actions = Array.isArray(plan.actions) ? plan.actions : [];
+    
     const planHTML = `
       <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -3048,33 +3100,40 @@ async function displayWeeklyPlan() {
         </div>
         
         <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-          <p style="color: #666; margin: 0 0 8px 0; font-size: 14px;"><strong>💰 Excedente Disponible:</strong> $${plan.surplus.surplus.toFixed(2)}</p>
+          <p style="color: #666; margin: 0 0 8px 0; font-size: 14px;"><strong>💰 Excedente Disponible:</strong> $${(plan.surplus.surplus || 0).toFixed(2)}</p>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
             <div style="background: white; padding: 10px; border-radius: 5px;">
               <p style="color: #666; font-size: 12px; margin: 0;">Deudas (60%)</p>
-              <p style="color: #3b82f6; font-size: 18px; font-weight: bold; margin: 5px 0 0 0;">$${plan.surplus.debtAllocation.toFixed(2)}</p>
+              <p style="color: #3b82f6; font-size: 18px; font-weight: bold; margin: 5px 0 0 0;">$${(plan.surplus.debtAllocation || 0).toFixed(2)}</p>
             </div>
             <div style="background: white; padding: 10px; border-radius: 5px;">
               <p style="color: #666; font-size: 12px; margin: 0;">Ahorros (40%)</p>
-              <p style="color: #10b981; font-size: 18px; font-weight: bold; margin: 5px 0 0 0;">$${plan.surplus.savingsAllocation.toFixed(2)}</p>
+              <p style="color: #10b981; font-size: 18px; font-weight: bold; margin: 5px 0 0 0;">$${(plan.surplus.savingsAllocation || 0).toFixed(2)}</p>
             </div>
           </div>
         </div>
         
+        ${actions.length > 0 ? `
         <div>
           <p style="color: #333; font-weight: 600; margin: 0 0 10px 0; font-size: 14px;">✅ Acciones Sugeridas:</p>
           <div style="display: flex; flex-direction: column; gap: 8px;">
-            ${plan.actions.map((action, index) => `
+            ${actions.map((action, index) => {
+              const safeDebtId = (action.debtId || '').replace(/'/g, "\\'");
+              const safeGoalId = (action.goalId || '').replace(/'/g, "\\'");
+              const safeDescription = (action.description || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+              return `
               <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
                 <input type="checkbox" id="action_${index}" style="width: 20px; height: 20px; cursor: pointer;" 
-                       onchange="handleWeeklyAction('${action.type}', '${action.goalId}', ${action.amount}, '${action.debtId || ''}')" />
+                       onchange="handleWeeklyAction('${action.type || ''}', '${safeGoalId}', ${action.amount || 0}, '${safeDebtId}')" />
                 <label for="action_${index}" style="flex: 1; cursor: pointer; margin: 0;">
-                  <span style="color: #333; font-weight: 600;">${action.description}</span>
+                  <span style="color: #333; font-weight: 600;">${safeDescription}</span>
                 </label>
               </div>
-            `).join('')}
+            `;
+            }).join('')}
           </div>
         </div>
+        ` : ''}
       </div>
     `;
     
@@ -3083,7 +3142,7 @@ async function displayWeeklyPlan() {
     console.error("Error mostrando plan semanal:", error);
     container.innerHTML = `
       <div style="background: #fee2e2; padding: 15px; border-radius: 8px; border-left: 4px solid #ef4444;">
-        <p style="color: #991b1b; margin: 0;">Error al cargar el plan semanal</p>
+        <p style="color: #991b1b; margin: 0;">Error al cargar el plan semanal: ${error.message}</p>
       </div>
     `;
   }
@@ -4936,15 +4995,17 @@ window.confirmPayment = async function () {
     
     // Sincronizar con meta si existe (nueva funcionalidad)
     try {
-      const goals = await loadGoals();
-      const linkedGoal = goals.find(g => g.linkedDebtId === currentPaymentDebtId && g.isActive !== false);
-      if (linkedGoal) {
-        const newCurrent = Math.max(0, linkedGoal.target - newAmount);
-        await updateDoc(doc(db, "goals", linkedGoal.id), {
-          current: newCurrent,
-          updatedAt: Timestamp.now()
-        });
-        cache.clear("goals");
+      const goals = await getGoals();
+      if (Array.isArray(goals)) {
+        const linkedGoal = goals.find(g => g.linkedDebtId === currentPaymentDebtId && g.isActive !== false);
+        if (linkedGoal) {
+          const newCurrent = Math.max(0, linkedGoal.target - newAmount);
+          await updateDoc(doc(db, "goals", linkedGoal.id), {
+            current: newCurrent,
+            updatedAt: Timestamp.now()
+          });
+          cache.clear("goals");
+        }
       }
     } catch (syncError) {
       console.error("Error sincronizando meta:", syncError);
