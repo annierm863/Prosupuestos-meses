@@ -5225,35 +5225,79 @@ function calculateStrategySavings(debts) {
 
 // Calcular tiempo estimado para pagar todas las deudas
 function calculateTimeToPayoff(debts, strategy, extraPayment = 0) {
-  if (!debts || debts.length === 0) return { months: 0, years: 0 };
+  if (!debts || debts.length === 0) return { months: 0, years: 0, monthsRemainder: 0 };
   
   const order = calculatePaymentOrder(debts, strategy);
-  const totalMinPayments = debts.reduce((sum, d) => sum + (d.minPayment || 0), 0);
   
-  let remainingDebts = debts.map(d => ({ ...d, remaining: d.amount }));
+  // Crear copia de las deudas con sus montos restantes
+  let remainingDebts = debts.map(d => ({
+    ...d,
+    remaining: parseFloat(d.amount) || 0,
+    minPayment: parseFloat(d.minPayment) || 0,
+    interest: parseFloat(d.interest) || 0
+  }));
+  
   let totalMonths = 0;
+  let currentPriorityIndex = 0;
+  const maxMonths = 1000; // Límite de seguridad para evitar bucles infinitos
   
-  order.forEach((debt, index) => {
-    const debtData = remainingDebts.find(d => d.id === debt.id);
-    if (debtData && debtData.remaining > 0) {
-      const payment = debtData.minPayment + (index === 0 ? extraPayment : 0);
-      const monthlyInterest = (debtData.remaining * (debt.interest || 0) / 100) / 12;
-      const effectivePayment = Math.max(0, payment - monthlyInterest);
-      
-      if (effectivePayment > 0) {
-        const months = Math.ceil(debtData.remaining / effectivePayment);
-        totalMonths += months;
-        
-        // Redistribuir el pago mínimo de esta deuda a la siguiente
-        if (index < order.length - 1) {
-          const nextDebt = remainingDebts.find(d => d.id === order[index + 1].id);
-          if (nextDebt) {
-            nextDebt.minPayment += debtData.minPayment;
-          }
-        }
+  // Simular mes a mes hasta pagar todas las deudas
+  while (currentPriorityIndex < order.length && totalMonths < maxMonths) {
+    // Encontrar la siguiente deuda prioritaria que aún tiene saldo
+    let currentDebt = null;
+    let currentDebtIndex = -1;
+    
+    for (let i = currentPriorityIndex; i < order.length; i++) {
+      const debtInOrder = remainingDebts.find(d => d.id === order[i].id);
+      if (debtInOrder && debtInOrder.remaining > 0.01) { // Tolerancia para errores de redondeo
+        currentDebt = debtInOrder;
+        currentDebtIndex = i;
+        break;
       }
     }
-  });
+    
+    // Si no hay más deudas, terminamos
+    if (!currentDebt) break;
+    
+    // Calcular el pago total disponible para la deuda prioritaria
+    // Sumar todos los pagos mínimos de las deudas ya pagadas + el pago extra
+    let totalAvailablePayment = extraPayment;
+    remainingDebts.forEach(debt => {
+      if (debt.remaining <= 0.01) {
+        // Esta deuda ya está pagada, su pago mínimo está disponible
+        totalAvailablePayment += debt.minPayment;
+      } else if (debt.id === currentDebt.id) {
+        // Esta es la deuda prioritaria actual, agregar su pago mínimo
+        totalAvailablePayment += debt.minPayment;
+      }
+    });
+    
+    // Calcular interés mensual
+    const monthlyInterestRate = currentDebt.interest / 100 / 12;
+    const monthlyInterest = currentDebt.remaining * monthlyInterestRate;
+    
+    // Calcular pago efectivo (después de intereses)
+    const effectivePayment = Math.max(0, totalAvailablePayment - monthlyInterest);
+    
+    if (effectivePayment <= 0) {
+      // Si el pago no cubre ni siquiera los intereses, la deuda crecerá
+      // Esto no debería pasar en un escenario real, pero lo manejamos
+      totalMonths++;
+      currentDebt.remaining += monthlyInterest - totalAvailablePayment;
+      continue;
+    }
+    
+    // Aplicar el pago
+    currentDebt.remaining = Math.max(0, currentDebt.remaining - effectivePayment);
+    
+    // Si la deuda está pagada (o casi pagada), mover a la siguiente prioridad
+    if (currentDebt.remaining <= 0.01) {
+      currentDebt.remaining = 0;
+      currentPriorityIndex = currentDebtIndex + 1;
+    }
+    
+    totalMonths++;
+  }
   
   return {
     months: totalMonths,
