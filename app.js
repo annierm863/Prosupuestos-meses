@@ -1499,6 +1499,9 @@ async function updateDashboard() {
       const workExpenses = await getWeekData("workExpenses", currentWeek.id);
       updateWorkAnalysis(workExpenses);
     }
+    
+    // Mostrar plan semanal (nueva funcionalidad)
+    await displayWeeklyPlan();
   } catch (error) {
     const errorMessage = handleError(error, "updateDashboard");
     showMessage(errorMessage, "error");
@@ -2568,31 +2571,64 @@ function displayGoals(goals) {
     return;
   }
 
-  container.innerHTML = goals
+  // Enriquecer metas con cálculos (compatible con metas existentes)
+  const enrichedGoals = enrichGoalsWithCalculations(goals);
+
+  container.innerHTML = enrichedGoals
     .map((goal) => {
       const progress = ((goal.current / goal.target) * 100).toFixed(1);
       const daysLeft = Math.ceil((new Date(goal.deadline) - new Date()) / (1000 * 60 * 60 * 24));
+      
+      // Determinar color del badge de status
+      let statusBadge = "";
+      let statusColor = "#8b5cf6";
+      if (goal.status) {
+        if (goal.status === "EN_RUTA") {
+          statusBadge = '<span style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">🟢 EN RUTA</span>';
+          statusColor = "#10b981";
+        } else if (goal.status === "RIESGO") {
+          statusBadge = '<span style="background: #f59e0b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">🟡 RIESGO</span>';
+          statusColor = "#f59e0b";
+        } else if (goal.status === "ATRASADA") {
+          statusBadge = '<span style="background: #ef4444; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">🔴 ATRASADA</span>';
+          statusColor = "#ef4444";
+        } else if (goal.status === "COMPLETADA") {
+          statusBadge = '<span style="background: #6366f1; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">✅ COMPLETADA</span>';
+          statusColor = "#6366f1";
+        }
+      }
+      
+      // Información adicional (si está disponible)
+      const additionalInfo = goal.weeklyTarget ? `
+        <div style="margin-top: 8px; padding: 8px; background: #f8f9fa; border-radius: 5px; font-size: 12px;">
+          📊 Esta semana: $${goal.weeklyTarget.toFixed(2)} • Mensual: $${goal.monthlyTarget ? goal.monthlyTarget.toFixed(2) : (goal.weeklyTarget * 4.33).toFixed(2)}
+        </div>
+      ` : "";
 
       return `
-        <div class="list-item" style="--item-color: #8b5cf6; flex-direction: column; align-items: flex-start;">
+        <div class="list-item" style="--item-color: ${statusColor}; flex-direction: column; align-items: flex-start; border-left: 4px solid ${statusColor};">
           <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 10px;">
-            <div>
-              <div class="list-item-title">🎯 ${goal.name}</div>
+            <div style="flex: 1;">
+              <div class="list-item-title" style="display: flex; align-items: center;">
+                ${goal.type === "debt" ? "💳" : "🎯"} ${goal.name}
+                ${statusBadge}
+              </div>
               <div class="list-item-details">
                 Meta: $${goal.target.toFixed(2)} • Actual: $${goal.current.toFixed(2)}
                 <br>📅 ${daysLeft} días restantes
               </div>
+              ${additionalInfo}
             </div>
-            <div style="display: flex; gap: 5px;">
+            <div style="display: flex; gap: 5px; flex-shrink: 0;">
               <button class="btn-small" style="background: #3b82f6; color: white;" onclick="editGoal('${goal.id}')">✏️ Editar</button>
               <button class="btn-small btn-danger" onclick="deleteGoal('${goal.id}')">🗑️</button>
             </div>
           </div>
           <div style="width: 100%;">
             <div class="progress-bar">
-              <div class="progress-fill" style="width: ${Math.min(progress, 100)}%;"></div>
+              <div class="progress-fill" style="width: ${Math.min(progress, 100)}%; background: ${statusColor};"></div>
             </div>
-            <p style="text-align: center; margin-top: 5px; font-weight: 600; color: #8b5cf6;">${progress}%</p>
+            <p style="text-align: center; margin-top: 5px; font-weight: 600; color: ${statusColor};">${progress}%</p>
           </div>
         </div>
       `;
@@ -2676,6 +2712,423 @@ window.deleteGoal = async function (id) {
     console.error("Error en deleteGoal:", error);
   } finally {
     hideLoading();
+  }
+};
+
+// ============= FUNCIONES HELPER PARA METAS EXTENDIDAS =============
+// Estas funciones extienden las metas existentes sin modificar los datos originales
+
+/**
+ * Calcula el weeklyTarget de una meta sin modificar la original
+ */
+function calculateWeeklyTarget(goal) {
+  const now = new Date();
+  const deadline = new Date(goal.deadline);
+  const weeksRemaining = Math.ceil((deadline - now) / (7 * 24 * 60 * 60 * 1000));
+  
+  if (weeksRemaining <= 0) {
+    return 0; // Ya pasó la fecha
+  }
+  
+  const remaining = goal.target - (goal.current || 0);
+  return remaining > 0 ? remaining / weeksRemaining : 0;
+}
+
+/**
+ * Calcula el status de una meta sin modificar la original
+ */
+function calculateGoalStatus(goal) {
+  const now = new Date();
+  const deadline = new Date(goal.deadline);
+  
+  // Si ya pasó la fecha
+  if (deadline < now) {
+    return (goal.current || 0) >= goal.target ? "COMPLETADA" : "ATRASADA";
+  }
+  
+  const weeksRemaining = Math.ceil((deadline - now) / (7 * 24 * 60 * 60 * 1000));
+  if (weeksRemaining <= 0) {
+    return (goal.current || 0) >= goal.target ? "COMPLETADA" : "ATRASADA";
+  }
+  
+  const remaining = goal.target - (goal.current || 0);
+  const requiredWeekly = remaining / weeksRemaining;
+  const actualWeekly = calculateWeeklyTarget(goal);
+  
+  // Si ya está completada
+  if (remaining <= 0) {
+    return "COMPLETADA";
+  }
+  
+  // Si el weeklyTarget es >= 90% del requerido → EN_RUTA
+  if (actualWeekly >= requiredWeekly * 0.9) {
+    return "EN_RUTA";
+  }
+  
+  // Si el weeklyTarget es >= 50% del requerido → RIESGO
+  if (actualWeekly >= requiredWeekly * 0.5) {
+    return "RIESGO";
+  }
+  
+  // Menos del 50% → ATRASADA
+  return "ATRASADA";
+}
+
+/**
+ * Agrega cálculos a una meta sin modificar la original
+ * Si la meta ya tiene los campos, los usa
+ * Si no, los calcula on-demand
+ */
+function enrichGoalWithCalculations(goal) {
+  // Crear copia para no modificar original
+  const enriched = { ...goal };
+  
+  // Calcular type si no existe (default: "savings")
+  if (!enriched.type) {
+    enriched.type = enriched.linkedDebtId ? "debt" : "savings";
+  }
+  
+  // Calcular weeklyTarget si no existe
+  if (!enriched.weeklyTarget) {
+    enriched.weeklyTarget = calculateWeeklyTarget(enriched);
+  }
+  
+  // Calcular monthlyTarget si no existe
+  if (!enriched.monthlyTarget) {
+    enriched.monthlyTarget = enriched.weeklyTarget * 4.33;
+  }
+  
+  // Calcular status si no existe
+  if (!enriched.status) {
+    enriched.status = calculateGoalStatus(enriched);
+  }
+  
+  // Default allocationPercentage
+  if (!enriched.allocationPercentage) {
+    enriched.allocationPercentage = enriched.type === "debt" ? 60 : 40;
+  }
+  
+  // Default isActive
+  if (enriched.isActive === undefined) {
+    enriched.isActive = true;
+  }
+  
+  return enriched;
+}
+
+/**
+ * Enriquecer array de metas con cálculos
+ */
+function enrichGoalsWithCalculations(goals) {
+  return goals.map(goal => enrichGoalWithCalculations(goal));
+}
+
+// ============= FUNCIONES DE PLAN SEMANAL Y METAS EXTENDIDAS =============
+
+/**
+ * Calcula el excedente semanal y su distribución según la regla 60/40
+ */
+async function calculateWeeklySurplus(weekId) {
+  if (!weekId) return null;
+  
+  try {
+    const incomes = await getWeekData("incomes", weekId);
+    const expenses = await getWeekData("expenses", weekId);
+    
+    const totalIncome = incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
+    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    
+    const surplus = totalIncome - totalExpenses;
+    const debtAllocation = surplus > 0 ? surplus * 0.6 : 0;
+    const savingsAllocation = surplus > 0 ? surplus * 0.4 : 0;
+    
+    return {
+      totalIncome,
+      totalExpenses,
+      surplus,
+      debtAllocation,
+      savingsAllocation
+    };
+  } catch (error) {
+    console.error("Error calculando excedente semanal:", error);
+    return null;
+  }
+}
+
+/**
+ * Crea una meta vinculada a una deuda existente
+ */
+window.createDebtGoal = async function (debtId) {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+
+  try {
+    // Obtener información de la deuda
+    const debtDoc = await getDoc(doc(db, "liabilities", debtId));
+    if (!debtDoc.exists()) {
+      showMessage("Deuda no encontrada", "error");
+      return;
+    }
+
+    const debt = { id: debtDoc.id, ...debtDoc.data() };
+    
+    // Verificar si ya existe una meta para esta deuda
+    const existingGoals = await loadGoals();
+    const existingGoal = existingGoals.find(g => g.linkedDebtId === debtId && g.isActive !== false);
+    
+    if (existingGoal) {
+      showMessage("Ya existe una meta activa para esta deuda", "warning");
+      return;
+    }
+
+    // Pedir fecha límite al usuario
+    const deadline = prompt(`¿Cuándo quieres pagar "${debt.name}"?\nIngresa la fecha límite (YYYY-MM-DD):`, 
+      new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
+    
+    if (!deadline) return;
+    
+    const deadlineDate = new Date(deadline);
+    if (deadlineDate < new Date()) {
+      showMessage("La fecha límite debe ser en el futuro", "error");
+      return;
+    }
+
+    showLoading("Creando meta...");
+    
+    const goalData = {
+      userId: currentUser.uid,
+      type: "debt",
+      name: `${debt.name} a $0`,
+      target: debt.amount,
+      current: debt.amount, // Empezar con el monto actual de la deuda
+      deadline: deadline,
+      linkedDebtId: debtId,
+      allocationPercentage: 60,
+      isActive: true,
+      createdAt: Timestamp.now()
+    };
+    
+    // Calcular targets
+    goalData.weeklyTarget = calculateWeeklyTarget(goalData);
+    goalData.monthlyTarget = goalData.weeklyTarget * 4.33;
+    goalData.status = calculateGoalStatus(goalData);
+    
+    await addDoc(collection(db, "goals"), goalData);
+    cache.clear("goals");
+    await loadGoals();
+    showMessage(`✅ Meta "${goalData.name}" creada exitosamente`, "success");
+  } catch (error) {
+    showMessage("Error al crear meta: " + error.message, "error");
+    console.error("Error en createDebtGoal:", error);
+  } finally {
+    hideLoading();
+  }
+};
+
+/**
+ * Genera un plan semanal básico con acciones sugeridas
+ */
+async function generateWeeklyPlan(weekId) {
+  if (!weekId || !currentUser) return null;
+  
+  try {
+    const surplus = await calculateWeeklySurplus(weekId);
+    if (!surplus || surplus.surplus <= 0) {
+      return null; // No hay excedente para planificar
+    }
+    
+    const goals = await loadGoals();
+    const activeGoals = goals.filter(g => g.isActive !== false);
+    
+    // Separar metas por tipo
+    const debtGoals = activeGoals.filter(g => {
+      const enriched = enrichGoalWithCalculations(g);
+      return enriched.type === "debt";
+    });
+    
+    const savingsGoals = activeGoals.filter(g => {
+      const enriched = enrichGoalWithCalculations(g);
+      return enriched.type === "savings";
+    });
+    
+    const actions = [];
+    
+    // Distribuir a deudas (60%)
+    if (debtGoals.length > 0 && surplus.debtAllocation > 0) {
+      const totalWeeklyTarget = debtGoals.reduce((sum, g) => {
+        const enriched = enrichGoalWithCalculations(g);
+        return sum + (enriched.weeklyTarget || 0);
+      }, 0);
+      
+      debtGoals.forEach(goal => {
+        const enriched = enrichGoalWithCalculations(goal);
+        if (enriched.weeklyTarget > 0 && totalWeeklyTarget > 0) {
+          const proportion = enriched.weeklyTarget / totalWeeklyTarget;
+          const allocated = Math.min(proportion * surplus.debtAllocation, enriched.weeklyTarget);
+          
+          if (allocated > 0.01) { // Solo si es significativo
+            actions.push({
+              goalId: goal.id,
+              goalName: goal.name,
+              debtId: goal.linkedDebtId,
+              type: "debt_payment",
+              amount: allocated,
+              description: `Pagar $${allocated.toFixed(2)} a ${goal.name.replace(" a $0", "")}`
+            });
+          }
+        }
+      });
+    }
+    
+    // Distribuir a ahorros (40%)
+    if (savingsGoals.length > 0 && surplus.savingsAllocation > 0) {
+      const totalWeeklyTarget = savingsGoals.reduce((sum, g) => {
+        const enriched = enrichGoalWithCalculations(g);
+        return sum + (enriched.weeklyTarget || 0);
+      }, 0);
+      
+      savingsGoals.forEach(goal => {
+        const enriched = enrichGoalWithCalculations(goal);
+        if (enriched.weeklyTarget > 0 && totalWeeklyTarget > 0) {
+          const proportion = enriched.weeklyTarget / totalWeeklyTarget;
+          const allocated = Math.min(proportion * surplus.savingsAllocation, enriched.weeklyTarget);
+          
+          if (allocated > 0.01) { // Solo si es significativo
+            actions.push({
+              goalId: goal.id,
+              goalName: goal.name,
+              type: "savings_contribution",
+              amount: allocated,
+              description: `Aportar $${allocated.toFixed(2)} a ${goal.name}`
+            });
+          }
+        }
+      });
+    }
+    
+    return {
+      surplus,
+      actions,
+      totalActions: actions.length
+    };
+  } catch (error) {
+    console.error("Error generando plan semanal:", error);
+    return null;
+  }
+}
+
+/**
+ * Muestra el panel de plan semanal en el dashboard
+ */
+async function displayWeeklyPlan() {
+  if (!currentWeek) return;
+  
+  const container = document.getElementById("weeklyPlanPanel");
+  if (!container) return;
+  
+  try {
+    const plan = await generateWeeklyPlan(currentWeek.id);
+    
+    if (!plan || plan.totalActions === 0) {
+      container.innerHTML = `
+        <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #9ca3af;">
+          <h4 style="color: #333; margin: 0 0 10px 0;">📋 Plan de Acción Semanal</h4>
+          <p style="color: #666; margin: 0;">No hay excedente disponible esta semana para asignar a metas.</p>
+        </div>
+      `;
+      return;
+    }
+    
+    const planHTML = `
+      <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h4 style="color: #333; margin: 0;">📋 Plan de Acción Semanal</h4>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+          <p style="color: #666; margin: 0 0 8px 0; font-size: 14px;"><strong>💰 Excedente Disponible:</strong> $${plan.surplus.surplus.toFixed(2)}</p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+            <div style="background: white; padding: 10px; border-radius: 5px;">
+              <p style="color: #666; font-size: 12px; margin: 0;">Deudas (60%)</p>
+              <p style="color: #3b82f6; font-size: 18px; font-weight: bold; margin: 5px 0 0 0;">$${plan.surplus.debtAllocation.toFixed(2)}</p>
+            </div>
+            <div style="background: white; padding: 10px; border-radius: 5px;">
+              <p style="color: #666; font-size: 12px; margin: 0;">Ahorros (40%)</p>
+              <p style="color: #10b981; font-size: 18px; font-weight: bold; margin: 5px 0 0 0;">$${plan.surplus.savingsAllocation.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+        
+        <div>
+          <p style="color: #333; font-weight: 600; margin: 0 0 10px 0; font-size: 14px;">✅ Acciones Sugeridas:</p>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${plan.actions.map((action, index) => `
+              <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" id="action_${index}" style="width: 20px; height: 20px; cursor: pointer;" 
+                       onchange="handleWeeklyAction('${action.type}', '${action.goalId}', ${action.amount}, '${action.debtId || ''}')" />
+                <label for="action_${index}" style="flex: 1; cursor: pointer; margin: 0;">
+                  <span style="color: #333; font-weight: 600;">${action.description}</span>
+                </label>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    container.innerHTML = planHTML;
+  } catch (error) {
+    console.error("Error mostrando plan semanal:", error);
+    container.innerHTML = `
+      <div style="background: #fee2e2; padding: 15px; border-radius: 8px; border-left: 4px solid #ef4444;">
+        <p style="color: #991b1b; margin: 0;">Error al cargar el plan semanal</p>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Maneja la acción del plan semanal cuando se marca como completada
+ */
+window.handleWeeklyAction = async function (actionType, goalId, amount, debtId) {
+  if (!currentUser) return;
+  
+  try {
+    if (actionType === "debt_payment" && debtId) {
+      // Registrar pago de deuda
+      await registerPayment(debtId);
+      // El modal de pago se abrirá con el monto sugerido
+      setTimeout(() => {
+        const paymentAmountInput = document.getElementById("paymentAmount");
+        if (paymentAmountInput) {
+          paymentAmountInput.value = amount.toFixed(2);
+        }
+      }, 100);
+    } else if (actionType === "savings_contribution") {
+      // Actualizar progreso de meta de ahorro
+      const goalDoc = await getDoc(doc(db, "goals", goalId));
+      if (goalDoc.exists()) {
+        const goal = goalDoc.data();
+        const newCurrent = (goal.current || 0) + amount;
+        
+        await updateDoc(doc(db, "goals", goalId), {
+          current: newCurrent,
+          updatedAt: Timestamp.now()
+        });
+        
+        cache.clear("goals");
+        await loadGoals();
+        showMessage(`✅ Aportaste $${amount.toFixed(2)} a "${goal.name}"`, "success");
+      }
+    }
+    
+    // Recargar plan semanal
+    await displayWeeklyPlan();
+  } catch (error) {
+    showMessage("Error al procesar acción: " + error.message, "error");
+    console.error("Error en handleWeeklyAction:", error);
   }
 };
 
@@ -4480,9 +4933,28 @@ window.confirmPayment = async function () {
     });
 
     cache.clear("liabilities");
+    
+    // Sincronizar con meta si existe (nueva funcionalidad)
+    try {
+      const goals = await loadGoals();
+      const linkedGoal = goals.find(g => g.linkedDebtId === currentPaymentDebtId && g.isActive !== false);
+      if (linkedGoal) {
+        const newCurrent = Math.max(0, linkedGoal.target - newAmount);
+        await updateDoc(doc(db, "goals", linkedGoal.id), {
+          current: newCurrent,
+          updatedAt: Timestamp.now()
+        });
+        cache.clear("goals");
+      }
+    } catch (syncError) {
+      console.error("Error sincronizando meta:", syncError);
+      // No fallar el pago si hay error en la sincronización
+    }
+    
     closePaymentModal();
     await displayDebts();
     await loadNetworth();
+    await loadGoals(); // Recargar metas para actualizar estado
     showMessage(`✅ Pago de $${amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} registrado exitosamente`, "success");
   } catch (error) {
     handleError(error, "confirmPayment");
@@ -5059,6 +5531,7 @@ async function displayDebts() {
           <div style="display: flex; flex-direction: column; gap: 5px; margin-left: 15px;">
             <button data-debt-id="${debt.id}" data-action="showDetails" style="background: #8b5cf6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">👁️ Ver Detalles</button>
             <button data-debt-id="${debt.id}" data-action="registerPayment" style="background: #10b981; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">💰 Registrar Pago</button>
+            <button data-debt-id="${debt.id}" data-action="createGoal" style="background: #f59e0b; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">🎯 Crear Meta</button>
             <button data-debt-id="${debt.id}" data-action="showHistory" style="background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">📋 Historial</button>
             <button data-debt-id="${debt.id}" data-action="update" style="background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">✏️ Actualizar</button>
             <button data-debt-id="${debt.id}" data-action="delete" style="background: #ef4444; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">🗑️ Eliminar</button>
@@ -5093,6 +5566,11 @@ async function displayDebts() {
         button.addEventListener('click', (e) => {
           e.stopPropagation();
           window.registerPayment(debtId);
+        });
+      } else if (action === 'createGoal' && typeof window.createDebtGoal === 'function') {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.createDebtGoal(debtId);
         });
       } else if (action === 'showHistory' && typeof window.showPaymentHistory === 'function') {
         button.addEventListener('click', (e) => {
