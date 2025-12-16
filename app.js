@@ -136,6 +136,129 @@ function hideLoading() {
 }
 
 // ============= FUNCIONES DE MENSAJES =============
+// ============= MODALES GENÉRICOS =============
+// Variables globales para modales
+let confirmModalCallback = null;
+let inputModalCallback = null;
+let dateInputModalCallback = null;
+
+/**
+ * Muestra un modal de confirmación (reemplaza confirm())
+ */
+window.showConfirmModal = function (message, title = "⚠️ Confirmar Acción", callback) {
+  document.getElementById("confirmModalTitle").textContent = title;
+  document.getElementById("confirmModalMessage").textContent = message;
+  confirmModalCallback = callback;
+  document.getElementById("confirmModal").classList.add("active");
+};
+
+window.closeConfirmModal = function () {
+  document.getElementById("confirmModal").classList.remove("active");
+  confirmModalCallback = null;
+};
+
+window.confirmModalAction = function () {
+  if (confirmModalCallback) {
+    confirmModalCallback(true);
+  }
+  closeConfirmModal();
+};
+
+/**
+ * Muestra un modal de input (reemplaza prompt())
+ */
+window.showInputModal = function (message, label, defaultValue = "", inputType = "text", callback) {
+  document.getElementById("inputModalTitle").textContent = "📝 Ingresar Información";
+  document.getElementById("inputModalMessage").textContent = message;
+  document.getElementById("inputModalLabel").textContent = label;
+  const input = document.getElementById("inputModalInput");
+  input.type = inputType;
+  input.value = defaultValue;
+  inputModalCallback = callback;
+  document.getElementById("inputModal").classList.add("active");
+  setTimeout(() => input.focus(), 100);
+};
+
+window.closeInputModal = function () {
+  document.getElementById("inputModal").classList.remove("active");
+  if (inputModalCallback) {
+    inputModalCallback(null);
+  }
+  inputModalCallback = null;
+  document.getElementById("inputModalInput").value = "";
+};
+
+window.confirmInputModal = function () {
+  const value = document.getElementById("inputModalInput").value;
+  if (inputModalCallback) {
+    inputModalCallback(value);
+  }
+  closeInputModal();
+};
+
+/**
+ * Muestra un modal de fecha (especial para fechas)
+ */
+window.showDateInputModal = function (message, label, defaultValue = "", callback) {
+  document.getElementById("dateInputModalTitle").textContent = "📅 Seleccionar Fecha";
+  document.getElementById("dateInputModalMessage").textContent = message;
+  document.getElementById("dateInputModalLabel").textContent = label;
+  const input = document.getElementById("dateInputModalInput");
+  input.value = defaultValue;
+  dateInputModalCallback = callback;
+  document.getElementById("dateInputModal").classList.add("active");
+  setTimeout(() => input.focus(), 100);
+};
+
+window.closeDateInputModal = function () {
+  document.getElementById("dateInputModal").classList.remove("active");
+  if (dateInputModalCallback) {
+    dateInputModalCallback(null);
+  }
+  dateInputModalCallback = null;
+  document.getElementById("dateInputModalInput").value = "";
+};
+
+window.confirmDateInputModal = function () {
+  const value = document.getElementById("dateInputModalInput").value;
+  if (dateInputModalCallback) {
+    dateInputModalCallback(value);
+  }
+  closeDateInputModal();
+};
+
+// Cerrar modales al hacer clic fuera
+document.getElementById("confirmModal")?.addEventListener("click", function (e) {
+  if (e.target.id === "confirmModal") {
+    closeConfirmModal();
+  }
+});
+
+document.getElementById("inputModal")?.addEventListener("click", function (e) {
+  if (e.target.id === "inputModal") {
+    closeInputModal();
+  }
+});
+
+document.getElementById("dateInputModal")?.addEventListener("click", function (e) {
+  if (e.target.id === "dateInputModal") {
+    closeDateInputModal();
+  }
+});
+
+// Permitir Enter en inputs
+document.getElementById("inputModalInput")?.addEventListener("keypress", function (e) {
+  if (e.key === "Enter") {
+    confirmInputModal();
+  }
+});
+
+document.getElementById("dateInputModalInput")?.addEventListener("keypress", function (e) {
+  if (e.key === "Enter") {
+    confirmDateInputModal();
+  }
+});
+
 function showMessage(message, type = "info") {
   // Crear elemento de mensaje si no existe
   let messageContainer = document.getElementById("globalMessage");
@@ -310,14 +433,18 @@ window.login = async function () {
 };
 
 window.logout = async function () {
-  if (confirm("¿Estás seguro que deseas cerrar sesión?")) {
-    try {
-      showLoading("Cerrando sesión...");
-      await signOut(auth);
-      cache.clear();
-    } finally {
-      hideLoading();
+  showConfirmModal("¿Estás seguro que deseas cerrar sesión?", "🚪 Cerrar Sesión", async (confirmed) => {
+    if (confirmed) {
+      try {
+        showLoading("Cerrando sesión...");
+        await signOut(auth);
+        cache.clear();
+      } finally {
+        hideLoading();
+      }
     }
+  });
+};
   }
 };
 
@@ -573,26 +700,28 @@ window.selectWeek = async function (weekId) {
 };
 
 window.deleteWeek = async function (weekId) {
-  if (!confirm("¿Estás seguro de eliminar esta semana?")) return;
+  showConfirmModal("¿Estás seguro de eliminar esta semana?", "🗑️ Eliminar Semana", async (confirmed) => {
+    if (!confirmed) return;
 
-  try {
-    showLoading("Eliminando semana...");
-    await deleteDoc(doc(db, "weeks", weekId));
+    try {
+      showLoading("Eliminando semana...");
+      await deleteDoc(doc(db, "weeks", weekId));
 
-    if (currentWeek && currentWeek.id === weekId) {
-      currentWeek = null;
+      if (currentWeek && currentWeek.id === weekId) {
+        currentWeek = null;
+      }
+
+      cache.clear("weeks");
+      await loadWeeks();
+      await updateDashboard();
+      showMessage("✅ Semana eliminada", "success");
+    } catch (error) {
+      showMessage("Error al eliminar semana: " + error.message, "error");
+      console.error("Error en deleteWeek:", error);
+    } finally {
+      hideLoading();
     }
-
-    cache.clear("weeks");
-    await loadWeeks();
-    await updateDashboard();
-    showMessage("✅ Semana eliminada", "success");
-  } catch (error) {
-    showMessage("Error al eliminar semana: " + error.message, "error");
-    console.error("Error en deleteWeek:", error);
-  } finally {
-    hideLoading();
-  }
+  });
 };
 
 // ============= GESTIÓN DE INGRESOS =============
@@ -808,21 +937,23 @@ window.cancelEditIncome = function () {
 };
 
 window.deleteIncome = async function (id) {
-  if (!confirm("¿Estás seguro de eliminar este ingreso?")) return;
+  showConfirmModal("¿Estás seguro de eliminar este ingreso?", "🗑️ Eliminar Ingreso", async (confirmed) => {
+    if (!confirmed) return;
 
-  try {
-    showLoading("Eliminando ingreso...");
-    await deleteDoc(doc(db, "incomes", id));
-    cache.clear("incomes", currentWeek.id);
-    await loadIncomes();
-    await updateDashboard();
-    showMessage("✅ Ingreso eliminado", "success");
-  } catch (error) {
-    showMessage("Error al eliminar ingreso: " + error.message, "error");
-    console.error("Error en deleteIncome:", error);
-  } finally {
-    hideLoading();
-  }
+    try {
+      showLoading("Eliminando ingreso...");
+      await deleteDoc(doc(db, "incomes", id));
+      cache.clear("incomes", currentWeek.id);
+      await loadIncomes();
+      await updateDashboard();
+      showMessage("✅ Ingreso eliminado", "success");
+    } catch (error) {
+      showMessage("Error al eliminar ingreso: " + error.message, "error");
+      console.error("Error en deleteIncome:", error);
+    } finally {
+      hideLoading();
+    }
+  });
 };
 
 // ============= GESTIÓN DE GASTOS PROGRAMADOS =============
@@ -1150,21 +1281,23 @@ function displayUnprogrammedExpenses(expenses) {
 }
 
 window.deleteExpense = async function (id) {
-  if (!confirm("¿Estás seguro de eliminar este gasto?")) return;
+  showConfirmModal("¿Estás seguro de eliminar este gasto?", "🗑️ Eliminar Gasto", async (confirmed) => {
+    if (!confirmed) return;
 
-  try {
-    showLoading("Eliminando gasto...");
-    await deleteDoc(doc(db, "expenses", id));
-    cache.clear("expenses", currentWeek.id);
-    await loadExpenses();
-    await updateDashboard();
-    showMessage("✅ Gasto eliminado", "success");
-  } catch (error) {
-    showMessage("Error al eliminar gasto: " + error.message, "error");
-    console.error("Error en deleteExpense:", error);
-  } finally {
-    hideLoading();
-  }
+    try {
+      showLoading("Eliminando gasto...");
+      await deleteDoc(doc(db, "expenses", id));
+      cache.clear("expenses", currentWeek.id);
+      await loadExpenses();
+      await updateDashboard();
+      showMessage("✅ Gasto eliminado", "success");
+    } catch (error) {
+      showMessage("Error al eliminar gasto: " + error.message, "error");
+      console.error("Error en deleteExpense:", error);
+    } finally {
+      hideLoading();
+    }
+  });
 };
 
 // ============= GESTIÓN DE GASTOS DE TRABAJO =============
@@ -1340,28 +1473,30 @@ window.cancelEditWork = function () {
 };
 
 window.deleteWorkExpense = async function (id) {
-  if (!confirm("¿Estás seguro de eliminar este gasto de trabajo?")) return;
+  showConfirmModal("¿Estás seguro de eliminar este gasto de trabajo?", "🗑️ Eliminar Gasto de Trabajo", async (confirmed) => {
+    if (!confirmed) return;
 
-  try {
-    showLoading("Eliminando gasto de trabajo...");
-    await deleteDoc(doc(db, "workExpenses", id));
-    cache.clear("workExpenses", currentWeek.id);
-    await loadWorkExpenses();
-    await updateDashboard();
-    
-    // Forzar actualización del análisis después de eliminar
-    if (currentWeek) {
-      const workExpenses = await getWeekData("workExpenses", currentWeek.id);
-      await updateWorkAnalysis(workExpenses);
+    try {
+      showLoading("Eliminando gasto de trabajo...");
+      await deleteDoc(doc(db, "workExpenses", id));
+      cache.clear("workExpenses", currentWeek.id);
+      await loadWorkExpenses();
+      await updateDashboard();
+      
+      // Forzar actualización del análisis después de eliminar
+      if (currentWeek) {
+        const workExpenses = await getWeekData("workExpenses", currentWeek.id);
+        await updateWorkAnalysis(workExpenses);
+      }
+      
+      showMessage("✅ Gasto de trabajo eliminado", "success");
+    } catch (error) {
+      showMessage("Error al eliminar gasto de trabajo: " + error.message, "error");
+      console.error("Error en deleteWorkExpense:", error);
+    } finally {
+      hideLoading();
     }
-    
-    showMessage("✅ Gasto de trabajo eliminado", "success");
-  } catch (error) {
-    showMessage("Error al eliminar gasto de trabajo: " + error.message, "error");
-    console.error("Error en deleteWorkExpense:", error);
-  } finally {
-    hideLoading();
-  }
+  });
 };
 
 // ============= DASHBOARD Y CÁLCULOS =============
@@ -2686,33 +2821,48 @@ window.editGoal = async function (id) {
 
     const goal = { id: goalDoc.id, ...goalDoc.data() };
 
-    // Mostrar formulario de edición
-    const newName = prompt("Nombre de la meta:", goal.name);
-    if (newName === null) return;
+    // Mostrar formulario de edición usando modales
+    showInputModal("Ingresa el nuevo nombre de la meta:", "Nombre de la meta:", goal.name, "text", (newName) => {
+      if (!newName) return;
+      
+      showInputModal("Ingresa el nuevo monto objetivo:", "Monto objetivo:", goal.target.toString(), "number", (newTarget) => {
+        if (!newTarget) return;
+        const targetValue = parseFloat(newTarget);
+        if (isNaN(targetValue) || targetValue <= 0) {
+          showMessage("Monto objetivo inválido", "error");
+          return;
+        }
+        
+        showInputModal("Ingresa el monto actual:", "Monto actual:", (goal.current || 0).toString(), "number", (newCurrent) => {
+          if (!newCurrent) return;
+          const currentValue = parseFloat(newCurrent);
+          if (isNaN(currentValue) || currentValue < 0) {
+            showMessage("Monto actual inválido", "error");
+            return;
+          }
+          
+          showDateInputModal("Ingresa la nueva fecha límite:", "Fecha límite:", goal.deadline, (newDeadline) => {
+            if (!newDeadline) return;
+            
+            // Actualizar la meta
+            updateGoalWithValues(id, newName, targetValue, currentValue, newDeadline);
+          });
+        });
+      });
+    });
+    return; // Salir aquí, la función continuará en los callbacks
 
-    const newTarget = prompt("Monto objetivo:", goal.target);
-    if (newTarget === null) return;
-    const targetValue = parseFloat(newTarget);
-    if (isNaN(targetValue) || targetValue <= 0) {
-      showMessage("Monto objetivo inválido", "error");
-      return;
-    }
+  } catch (error) {
+    showMessage("Error al actualizar meta: " + error.message, "error");
+    console.error("Error en editGoal:", error);
+  }
+};
 
-    const newCurrent = prompt("Monto actual:", goal.current || 0);
-    if (newCurrent === null) return;
-    const currentValue = parseFloat(newCurrent);
-    if (isNaN(currentValue) || currentValue < 0) {
-      showMessage("Monto actual inválido", "error");
-      return;
-    }
-
-    const newDeadline = prompt("Fecha límite (YYYY-MM-DD):", goal.deadline);
-    if (newDeadline === null) return;
-    if (!newDeadline) {
-      showMessage("Fecha límite requerida", "error");
-      return;
-    }
-
+/**
+ * Función auxiliar para actualizar la meta con los nuevos valores
+ */
+async function updateGoalWithValues(id, newName, targetValue, currentValue, newDeadline) {
+  try {
     showLoading("Actualizando meta...");
     await updateDoc(doc(db, "goals", id), {
       name: newName,
@@ -2726,27 +2876,29 @@ window.editGoal = async function (id) {
     showMessage("✅ Meta actualizada", "success");
   } catch (error) {
     showMessage("Error al actualizar meta: " + error.message, "error");
-    console.error("Error en editGoal:", error);
+    console.error("Error en updateGoalWithValues:", error);
   } finally {
     hideLoading();
   }
-};
+}
 
 window.deleteGoal = async function (id) {
-  if (!confirm("¿Estás seguro de eliminar esta meta?")) return;
+  showConfirmModal("¿Estás seguro de eliminar esta meta?", "🗑️ Eliminar Meta", async (confirmed) => {
+    if (!confirmed) return;
 
-  try {
-    showLoading("Eliminando meta...");
-    await deleteDoc(doc(db, "goals", id));
-    cache.clear("goals");
-    await loadGoals();
-    showMessage("✅ Meta eliminada", "success");
-  } catch (error) {
-    showMessage("Error al eliminar meta: " + error.message, "error");
-    console.error("Error en deleteGoal:", error);
-  } finally {
-    hideLoading();
-  }
+    try {
+      showLoading("Eliminando meta...");
+      await deleteDoc(doc(db, "goals", id));
+      cache.clear("goals");
+      await loadGoals();
+      showMessage("✅ Meta eliminada", "success");
+    } catch (error) {
+      showMessage("Error al eliminar meta: " + error.message, "error");
+      console.error("Error en deleteGoal:", error);
+    } finally {
+      hideLoading();
+    }
+  });
 };
 
 // ============= FUNCIONES HELPER PARA METAS EXTENDIDAS =============
@@ -2925,18 +3077,39 @@ window.createDebtGoal = async function (debtId) {
       return;
     }
 
-    // Pedir fecha límite al usuario
-    const deadline = prompt(`¿Cuándo quieres pagar "${debt.name}"?\nIngresa la fecha límite (YYYY-MM-DD):`, 
-      new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
-    
-    if (!deadline) return;
-    
-    const deadlineDate = new Date(deadline);
-    if (deadlineDate < new Date()) {
-      showMessage("La fecha límite debe ser en el futuro", "error");
-      return;
-    }
+    // Pedir fecha límite al usuario usando modal
+    const defaultDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    showDateInputModal(
+      `¿Cuándo quieres pagar "${debt.name}"?`,
+      "Fecha Límite (YYYY-MM-DD):",
+      defaultDate,
+      (deadline) => {
+        if (!deadline) return;
+        
+        const deadlineDate = new Date(deadline);
+        if (deadlineDate < new Date()) {
+          showMessage("La fecha límite debe ser en el futuro", "error");
+          return;
+        }
+        
+        // Continuar con la creación de la meta
+        createDebtGoalWithDate(debtId, debt, deadline);
+      }
+    );
+    return; // Salir aquí, la función continuará en el callback
 
+    // Esta función se llama desde el callback del modal
+  } catch (error) {
+    showMessage("Error al crear meta: " + error.message, "error");
+    console.error("Error en createDebtGoal:", error);
+  }
+};
+
+/**
+ * Función auxiliar para crear la meta después de obtener la fecha
+ */
+async function createDebtGoalWithDate(debtId, debt, deadline) {
+  try {
     showLoading("Creando meta...");
     
     const goalData = {
@@ -2963,11 +3136,11 @@ window.createDebtGoal = async function (debtId) {
     showMessage(`✅ Meta "${goalData.name}" creada exitosamente`, "success");
   } catch (error) {
     showMessage("Error al crear meta: " + error.message, "error");
-    console.error("Error en createDebtGoal:", error);
+    console.error("Error en createDebtGoalWithDate:", error);
   } finally {
     hideLoading();
   }
-};
+}
 
 /**
  * Genera un plan semanal básico con acciones sugeridas
@@ -4329,34 +4502,38 @@ async function loadNetworth() {
 
 // Eliminar activo
 window.deleteAsset = async function (id) {
-  if (!confirm("¿Estás seguro de eliminar este activo?")) return;
-  try {
-    showLoading("Eliminando activo...");
-    await deleteDoc(doc(db, "assets", id));
-    cache.clear("assets");
-    showMessage("✅ Activo eliminado", "success");
-    await loadNetworth();
-  } catch (error) {
-    handleError(error, "deleteAsset");
-  } finally {
-    hideLoading();
-  }
+  showConfirmModal("¿Estás seguro de eliminar este activo?", "🗑️ Eliminar Activo", async (confirmed) => {
+    if (!confirmed) return;
+    try {
+      showLoading("Eliminando activo...");
+      await deleteDoc(doc(db, "assets", id));
+      cache.clear("assets");
+      showMessage("✅ Activo eliminado", "success");
+      await loadNetworth();
+    } catch (error) {
+      handleError(error, "deleteAsset");
+    } finally {
+      hideLoading();
+    }
+  });
 };
 
 // Eliminar pasivo
 window.deleteLiability = async function (id) {
-  if (!confirm("¿Estás seguro de eliminar este pasivo?")) return;
-  try {
-    showLoading("Eliminando pasivo...");
-    await deleteDoc(doc(db, "liabilities", id));
-    cache.clear("liabilities");
-    showMessage("✅ Pasivo eliminado", "success");
-    await loadNetworth();
-  } catch (error) {
-    handleError(error, "deleteLiability");
-  } finally {
-    hideLoading();
-  }
+  showConfirmModal("¿Estás seguro de eliminar este pasivo?", "🗑️ Eliminar Pasivo", async (confirmed) => {
+    if (!confirmed) return;
+    try {
+      showLoading("Eliminando pasivo...");
+      await deleteDoc(doc(db, "liabilities", id));
+      cache.clear("liabilities");
+      showMessage("✅ Pasivo eliminado", "success");
+      await loadNetworth();
+    } catch (error) {
+      handleError(error, "deleteLiability");
+    } finally {
+      hideLoading();
+    }
+  });
 };
 
 // Gráfico de patrimonio neto
@@ -5112,47 +5289,49 @@ window.showPaymentHistory = async function (debtId) {
 
 // Eliminar pago
 window.deletePayment = async function (paymentId, debtId) {
-  if (!confirm("¿Estás seguro de eliminar este pago? El monto se agregará de vuelta a la deuda.")) return;
+  showConfirmModal("¿Estás seguro de eliminar este pago? El monto se agregará de vuelta a la deuda.", "🗑️ Eliminar Pago", async (confirmed) => {
+    if (!confirmed) return;
 
-  try {
-    showLoading("Eliminando pago...");
-    
-    const paymentDoc = await getDoc(doc(db, "debtPayments", paymentId));
-    if (!paymentDoc.exists()) {
-      showMessage("Pago no encontrado", "error");
-      return;
+    try {
+      showLoading("Eliminando pago...");
+      
+      const paymentDoc = await getDoc(doc(db, "debtPayments", paymentId));
+      if (!paymentDoc.exists()) {
+        showMessage("Pago no encontrado", "error");
+        return;
+      }
+
+      const payment = paymentDoc.data();
+      const debtDoc = await getDoc(doc(db, "liabilities", debtId));
+      if (!debtDoc.exists()) {
+        showMessage("Deuda no encontrada", "error");
+        return;
+      }
+
+      const debt = debtDoc.data();
+      
+      // Restaurar el monto a la deuda
+      await updateDoc(doc(db, "liabilities", debtId), {
+        amount: debt.amount + payment.amount,
+      });
+      
+      // Eliminar el pago
+      await deleteDoc(doc(db, "debtPayments", paymentId));
+
+      cache.clear("liabilities");
+      await displayDebts();
+      await loadNetworth();
+      showMessage("✅ Pago eliminado", "success");
+      
+      // Cerrar modal y recargar historial
+      closeModal();
+      await showPaymentHistory(debtId);
+    } catch (error) {
+      handleError(error, "deletePayment");
+    } finally {
+      hideLoading();
     }
-
-    const payment = paymentDoc.data();
-    const debtDoc = await getDoc(doc(db, "liabilities", debtId));
-    if (!debtDoc.exists()) {
-      showMessage("Deuda no encontrada", "error");
-      return;
-    }
-
-    const debt = debtDoc.data();
-    
-    // Restaurar el monto a la deuda
-    await updateDoc(doc(db, "liabilities", debtId), {
-      amount: debt.amount + payment.amount,
-    });
-    
-    // Eliminar el pago
-    await deleteDoc(doc(db, "debtPayments", paymentId));
-
-    cache.clear("liabilities");
-    await displayDebts();
-    await loadNetworth();
-    showMessage("✅ Pago eliminado", "success");
-    
-    // Cerrar modal y recargar historial
-    closeModal();
-    await showPaymentHistory(debtId);
-  } catch (error) {
-    handleError(error, "deletePayment");
-  } finally {
-    hideLoading();
-  }
+  });
 };
 
 async function loadDebts() {
@@ -6300,18 +6479,20 @@ async function displayInvestments() {
 }
 
 window.deleteInvestment = async function (id) {
-  if (!confirm("¿Estás seguro de eliminar esta inversión?")) return;
-  try {
-    showLoading("Eliminando inversión...");
-    await deleteDoc(doc(db, "investments", id));
-    cache.clear("investments");
-    showMessage("✅ Inversión eliminada", "success");
-    await displayInvestments();
-  } catch (error) {
-    handleError(error, "deleteInvestment");
-  } finally {
-    hideLoading();
-  }
+  showConfirmModal("¿Estás seguro de eliminar esta inversión?", "🗑️ Eliminar Inversión", async (confirmed) => {
+    if (!confirmed) return;
+    try {
+      showLoading("Eliminando inversión...");
+      await deleteDoc(doc(db, "investments", id));
+      cache.clear("investments");
+      showMessage("✅ Inversión eliminada", "success");
+      await displayInvestments();
+    } catch (error) {
+      handleError(error, "deleteInvestment");
+    } finally {
+      hideLoading();
+    }
+  });
 };
 
 function createInvestmentsChart(investments) {
@@ -6511,18 +6692,20 @@ async function displayBudgets() {
 }
 
 window.deleteBudget = async function (id) {
-  if (!confirm("¿Estás seguro de eliminar este presupuesto?")) return;
-  try {
-    showLoading("Eliminando presupuesto...");
-    await deleteDoc(doc(db, "budgets", id));
-    cache.clear("budgets");
-    showMessage("✅ Presupuesto eliminado", "success");
-    await displayBudgets();
-  } catch (error) {
-    handleError(error, "deleteBudget");
-  } finally {
-    hideLoading();
-  }
+  showConfirmModal("¿Estás seguro de eliminar este presupuesto?", "🗑️ Eliminar Presupuesto", async (confirmed) => {
+    if (!confirmed) return;
+    try {
+      showLoading("Eliminando presupuesto...");
+      await deleteDoc(doc(db, "budgets", id));
+      cache.clear("budgets");
+      showMessage("✅ Presupuesto eliminado", "success");
+      await displayBudgets();
+    } catch (error) {
+      handleError(error, "deleteBudget");
+    } finally {
+      hideLoading();
+    }
+  });
 };
 
 function createBudgetsChart(budgets, expensesByCategory) {

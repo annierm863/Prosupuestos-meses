@@ -1129,6 +1129,65 @@
       </div>
     </div>
 
+    <!-- Modal genérico para confirmaciones -->
+    <div id="confirmModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3 id="confirmModalTitle">⚠️ Confirmar Acción</h3>
+          <button class="close-modal" onclick="closeConfirmModal()">×</button>
+        </div>
+        <div id="confirmModalBody" style="padding: 20px;">
+          <p id="confirmModalMessage" style="color: #333; font-size: 16px; margin: 0 0 20px 0;"></p>
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="closeConfirmModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancelar</button>
+            <button onclick="confirmModalAction()" style="flex: 1; padding: 12px; background: #ef4444; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Confirmar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal genérico para inputs (reemplazar prompt) -->
+    <div id="inputModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3 id="inputModalTitle">📝 Ingresar Información</h3>
+          <button class="close-modal" onclick="closeInputModal()">×</button>
+        </div>
+        <div id="inputModalBody" style="padding: 20px;">
+          <p id="inputModalMessage" style="color: #333; font-size: 14px; margin: 0 0 15px 0;"></p>
+          <div class="form-group">
+            <label id="inputModalLabel"></label>
+            <input type="text" id="inputModalInput" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;" />
+          </div>
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="closeInputModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancelar</button>
+            <button onclick="confirmInputModal()" style="flex: 1; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Aceptar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para fecha (especial para createDebtGoal) -->
+    <div id="dateInputModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3 id="dateInputModalTitle">📅 Seleccionar Fecha</h3>
+          <button class="close-modal" onclick="closeDateInputModal()">×</button>
+        </div>
+        <div id="dateInputModalBody" style="padding: 20px;">
+          <p id="dateInputModalMessage" style="color: #333; font-size: 14px; margin: 0 0 15px 0;"></p>
+          <div class="form-group">
+            <label id="dateInputModalLabel">Fecha Límite:</label>
+            <input type="date" id="dateInputModalInput" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px;" />
+          </div>
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="closeDateInputModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancelar</button>
+            <button onclick="confirmDateInputModal()" style="flex: 1; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Aceptar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal para registrar pago -->
     <div id="paymentModal" class="modal">
       <div class="modal-content" style="max-width: 500px;">
