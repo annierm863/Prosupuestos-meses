@@ -2904,6 +2904,9 @@ function displayGoals(goals) {
     .join("");
 }
 
+// Variable global para almacenar el ID de la meta que se está editando
+let currentEditingGoalId = null;
+
 window.editGoal = async function (id) {
   if (!currentUser) {
     showMessage("Debes iniciar sesión", "error");
@@ -2919,65 +2922,91 @@ window.editGoal = async function (id) {
     }
 
     const goal = { id: goalDoc.id, ...goalDoc.data() };
+    currentEditingGoalId = id;
 
-    // Mostrar formulario de edición usando modales
-    showInputModal("Ingresa el nuevo nombre de la meta:", "Nombre de la meta:", goal.name, "text", (newName) => {
-      if (!newName) return;
-      
-      showInputModal("Ingresa el nuevo monto objetivo:", "Monto objetivo:", goal.target.toString(), "number", (newTarget) => {
-        if (!newTarget) return;
-        const targetValue = parseFloat(newTarget);
-        if (isNaN(targetValue) || targetValue <= 0) {
-          showMessage("Monto objetivo inválido", "error");
-          return;
-        }
-        
-        showInputModal("Ingresa el monto actual:", "Monto actual:", (goal.current || 0).toString(), "number", (newCurrent) => {
-          if (!newCurrent) return;
-          const currentValue = parseFloat(newCurrent);
-          if (isNaN(currentValue) || currentValue < 0) {
-            showMessage("Monto actual inválido", "error");
-            return;
-          }
-          
-          showDateInputModal("Ingresa la nueva fecha límite:", "Fecha límite:", goal.deadline, (newDeadline) => {
-            if (!newDeadline) return;
-            
-            // Actualizar la meta
-            updateGoalWithValues(id, newName, targetValue, currentValue, newDeadline);
-          });
-        });
-      });
-    });
+    // Llenar el modal con los datos actuales
+    document.getElementById("editGoalName").value = goal.name || "";
+    document.getElementById("editGoalTarget").value = goal.target || "";
+    document.getElementById("editGoalCurrent").value = goal.current || 0;
+    document.getElementById("editGoalDeadline").value = goal.deadline || "";
+
+    // Mostrar el modal
+    document.getElementById("editGoalModal").classList.add("active");
+    document.getElementById("editGoalName").focus();
   } catch (error) {
     showMessage("Error al cargar meta: " + error.message, "error");
     console.error("Error en editGoal:", error);
   }
 };
 
-/**
- * Función auxiliar para actualizar la meta con los nuevos valores
- */
-async function updateGoalWithValues(id, newName, targetValue, currentValue, newDeadline) {
+window.closeEditGoalModal = function () {
+  document.getElementById("editGoalModal").classList.remove("active");
+  currentEditingGoalId = null;
+  // Limpiar campos
+  document.getElementById("editGoalName").value = "";
+  document.getElementById("editGoalTarget").value = "";
+  document.getElementById("editGoalCurrent").value = "";
+  document.getElementById("editGoalDeadline").value = "";
+};
+
+window.confirmEditGoal = async function () {
+  if (!currentEditingGoalId || !currentUser) return;
+
+  const name = document.getElementById("editGoalName").value.trim();
+  const target = parseFloat(document.getElementById("editGoalTarget").value);
+  const current = parseFloat(document.getElementById("editGoalCurrent").value);
+  const deadline = document.getElementById("editGoalDeadline").value;
+
+  // Validaciones
+  if (!name) {
+    showMessage("El nombre de la meta es requerido", "error");
+    return;
+  }
+
+  if (!target || target <= 0) {
+    showMessage("El monto objetivo debe ser mayor a 0", "error");
+    return;
+  }
+
+  if (isNaN(current) || current < 0) {
+    showMessage("El monto actual debe ser un número válido mayor o igual a 0", "error");
+    return;
+  }
+
+  if (!deadline) {
+    showMessage("La fecha límite es requerida", "error");
+    return;
+  }
+
+  const deadlineDate = new Date(deadline);
+  if (isNaN(deadlineDate.getTime())) {
+    showMessage("La fecha límite no es válida", "error");
+    return;
+  }
+
   try {
     showLoading("Actualizando meta...");
-    await updateDoc(doc(db, "goals", id), {
-      name: newName,
-      target: targetValue,
-      current: currentValue,
-      deadline: newDeadline,
+    
+    await updateDoc(doc(db, "goals", currentEditingGoalId), {
+      name: name,
+      target: target,
+      current: current,
+      deadline: deadline,
+      updatedAt: Timestamp.now()
     });
 
     cache.clear("goals");
     await loadGoals();
-    showMessage("✅ Meta actualizada", "success");
+    closeEditGoalModal();
+    showMessage("✅ Meta actualizada exitosamente", "success");
   } catch (error) {
     showMessage("Error al actualizar meta: " + error.message, "error");
-    console.error("Error en updateGoalWithValues:", error);
+    console.error("Error en confirmEditGoal:", error);
   } finally {
     hideLoading();
   }
-}
+};
+
 
 window.deleteGoal = async function (id) {
   showConfirmModal("¿Estás seguro de eliminar esta meta?", "🗑️ Eliminar Meta", async (confirmed) => {
@@ -3213,8 +3242,8 @@ async function createDebtGoalWithDate(debtId, debt, deadline) {
       userId: currentUser.uid,
       type: "debt",
       name: `${debt.name} a $0`,
-      target: debt.amount,
-      current: debt.amount, // Empezar con el monto actual de la deuda
+      target: debt.amount, // El objetivo es pagar todo el monto de la deuda
+      current: 0, // Empezar en 0, el progreso se calculará basado en cuánto se ha pagado
       deadline: deadline,
       linkedDebtId: debtId,
       allocationPercentage: 60,
@@ -3659,6 +3688,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
   const detailModal = document.getElementById("detailModal");
   const weekDetailModal = document.getElementById("weekDetailModal");
+  const editGoalModal = document.getElementById("editGoalModal");
 
   if (detailModal) {
     detailModal.addEventListener("click", function (e) {
@@ -3672,6 +3702,14 @@ document.addEventListener("DOMContentLoaded", () => {
     weekDetailModal.addEventListener("click", function (e) {
       if (e.target === this) {
         closeWeekModal();
+      }
+    });
+  }
+
+  if (editGoalModal) {
+    editGoalModal.addEventListener("click", function (e) {
+      if (e.target === this) {
+        closeEditGoalModal();
       }
     });
   }
@@ -5276,7 +5314,11 @@ window.confirmPayment = async function () {
       if (Array.isArray(goals)) {
         const linkedGoal = goals.find(g => g.linkedDebtId === currentPaymentDebtId && g.isActive !== false);
         if (linkedGoal) {
+          // El progreso de la meta es: cuánto se ha pagado de la deuda
+          // Si la meta tiene target = monto original de la deuda, entonces:
+          // current = target - monto actual de la deuda
           const newCurrent = Math.max(0, linkedGoal.target - newAmount);
+          
           await updateDoc(doc(db, "goals", linkedGoal.id), {
             current: newCurrent,
             updatedAt: Timestamp.now()
@@ -5472,8 +5514,10 @@ window.showDebtDetails = async function (debtId) {
       debt.paymentDay = parseInt(debt.paymentDay) || null;
     }
     
-    // Calcular progreso
-    const progress = debt.originalAmount ? ((1 - debt.amount / debt.originalAmount) * 100).toFixed(1) : 0;
+    // Calcular progreso: si la deuda creció más que el original, mostrar 0% en lugar de negativo
+    const progress = debt.originalAmount && debt.originalAmount > 0 
+      ? Math.max(0, ((1 - debt.amount / debt.originalAmount) * 100)).toFixed(1) 
+      : 0;
     
     // Obtener icono de propietario
     const ownerIcon = debt.owner === "Yo" ? "👤" : debt.owner === "Esposa" ? "👩" : "👥";
@@ -5734,7 +5778,10 @@ async function displayDebts() {
     const debtsHTML = debts.length > 0 ? debts
       .map(
         (debt) => {
-          const progress = debt.originalAmount ? ((1 - debt.amount / debt.originalAmount) * 100).toFixed(1) : 0;
+          // Calcular progreso: si la deuda creció más que el original, mostrar 0% en lugar de negativo
+          const progress = debt.originalAmount && debt.originalAmount > 0 
+            ? Math.max(0, ((1 - debt.amount / debt.originalAmount) * 100)).toFixed(1) 
+            : 0;
           
           // Obtener prioridad de esta deuda
           const priority = priorityMap[debt.id] || null;
