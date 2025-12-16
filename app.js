@@ -542,8 +542,6 @@ window.logout = async function () {
     }
   });
 };
-  }
-};
 
 function showAuthMessage(message, type) {
   const messageDiv = document.getElementById("authMessage");
