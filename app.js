@@ -227,37 +227,55 @@ window.confirmDateInputModal = function () {
   closeDateInputModal();
 };
 
-// Cerrar modales al hacer clic fuera
-document.getElementById("confirmModal")?.addEventListener("click", function (e) {
-  if (e.target.id === "confirmModal") {
-    closeConfirmModal();
+// Inicializar event listeners de modales cuando el DOM esté listo
+function initModalListeners() {
+  // Cerrar modales al hacer clic fuera
+  const confirmModalEl = document.getElementById("confirmModal");
+  if (confirmModalEl) {
+    confirmModalEl.addEventListener("click", function (e) {
+      if (e.target.id === "confirmModal") {
+        closeConfirmModal();
+      }
+    });
   }
-});
 
-document.getElementById("inputModal")?.addEventListener("click", function (e) {
-  if (e.target.id === "inputModal") {
-    closeInputModal();
+  const inputModalEl = document.getElementById("inputModal");
+  if (inputModalEl) {
+    inputModalEl.addEventListener("click", function (e) {
+      if (e.target.id === "inputModal") {
+        closeInputModal();
+      }
+    });
   }
-});
 
-document.getElementById("dateInputModal")?.addEventListener("click", function (e) {
-  if (e.target.id === "dateInputModal") {
-    closeDateInputModal();
+  const dateInputModalEl = document.getElementById("dateInputModal");
+  if (dateInputModalEl) {
+    dateInputModalEl.addEventListener("click", function (e) {
+      if (e.target.id === "dateInputModal") {
+        closeDateInputModal();
+      }
+    });
   }
-});
 
-// Permitir Enter en inputs
-document.getElementById("inputModalInput")?.addEventListener("keypress", function (e) {
-  if (e.key === "Enter") {
-    confirmInputModal();
+  // Permitir Enter en inputs
+  const inputModalInputEl = document.getElementById("inputModalInput");
+  if (inputModalInputEl) {
+    inputModalInputEl.addEventListener("keypress", function (e) {
+      if (e.key === "Enter") {
+        confirmInputModal();
+      }
+    });
   }
-});
 
-document.getElementById("dateInputModalInput")?.addEventListener("keypress", function (e) {
-  if (e.key === "Enter") {
-    confirmDateInputModal();
+  const dateInputModalInputEl = document.getElementById("dateInputModalInput");
+  if (dateInputModalInputEl) {
+    dateInputModalInputEl.addEventListener("keypress", function (e) {
+      if (e.key === "Enter") {
+        confirmDateInputModal();
+      }
+    });
   }
-});
+}
 
 function showMessage(message, type = "info") {
   // Crear elemento de mensaje si no existe
@@ -476,6 +494,10 @@ function getSpanishError(errorCode) {
 async function initApp() {
   try {
     showLoading("Cargando aplicación...");
+    
+    // Inicializar listeners de modales
+    initModalListeners();
+    
     await loadWeeks();
     generateMonthGrid();
     setDefaultDates();
@@ -2850,10 +2872,8 @@ window.editGoal = async function (id) {
         });
       });
     });
-    return; // Salir aquí, la función continuará en los callbacks
-
   } catch (error) {
-    showMessage("Error al actualizar meta: " + error.message, "error");
+    showMessage("Error al cargar meta: " + error.message, "error");
     console.error("Error en editGoal:", error);
   }
 };
@@ -3557,6 +3577,9 @@ function getCategoryEmoji(category) {
 
 // Cerrar modal al hacer clic fuera
 document.addEventListener("DOMContentLoaded", () => {
+  // Inicializar listeners de modales genéricos
+  initModalListeners();
+  
   const detailModal = document.getElementById("detailModal");
   const weekDetailModal = document.getElementById("weekDetailModal");
 
