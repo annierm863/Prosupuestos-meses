@@ -2714,11 +2714,406 @@ window.exportMonthlyCSV = async function () {
   }
 };
 
-// ============= METAS DE AHORRO =============
+// ============= METAS =============
+
+// Variable global para el tipo de meta seleccionado en el wizard
+let selectedGoalType = null;
+
+/**
+ * Selecciona el tipo de meta en el wizard
+ */
+window.selectGoalType = async function (type) {
+  selectedGoalType = type;
+  
+  // Actualizar UI de selección
+  document.querySelectorAll('.goal-type-card').forEach(card => {
+    card.style.border = '2px solid #e5e7eb';
+    card.style.background = 'white';
+  });
+  
+  const selectedCard = document.getElementById(`goalType${type.charAt(0).toUpperCase() + type.slice(1)}`);
+  if (selectedCard) {
+    selectedCard.style.border = '2px solid #3b82f6';
+    selectedCard.style.background = '#eff6ff';
+  }
+  
+  // Configurar formulario según tipo
+  document.getElementById('goalFormDebt').style.display = 'none';
+  document.getElementById('goalFormSavings').style.display = 'none';
+  document.getElementById('goalFormCompound').style.display = 'none';
+  
+  const titleEl = document.getElementById('goalFormTitle');
+  
+  if (type === 'debt') {
+    titleEl.textContent = '💳 Configurar Meta de Deuda';
+    document.getElementById('goalFormDebt').style.display = 'block';
+    await populateDebtSelect();
+  } else if (type === 'savings') {
+    titleEl.textContent = '💰 Configurar Meta de Ahorro';
+    document.getElementById('goalFormSavings').style.display = 'block';
+  } else if (type === 'compound') {
+    titleEl.textContent = '🎯 Configurar Meta Compuesta';
+    document.getElementById('goalFormCompound').style.display = 'block';
+    await populateCompoundDebtInfo();
+  }
+  
+  // Ir al paso 2
+  goToGoalStep(2);
+};
+
+/**
+ * Navega entre pasos del wizard
+ */
+window.goToGoalStep = function (step) {
+  document.getElementById('goalWizardStep1').style.display = step === 1 ? 'block' : 'none';
+  document.getElementById('goalWizardStep2').style.display = step === 2 ? 'block' : 'none';
+  
+  if (step === 1) {
+    selectedGoalType = null;
+    // Limpiar selección visual
+    document.querySelectorAll('.goal-type-card').forEach(card => {
+      card.style.border = '2px solid #e5e7eb';
+      card.style.background = 'white';
+    });
+  }
+};
+
+/**
+ * Poblar el selector de deudas
+ */
+async function populateDebtSelect() {
+  const select = document.getElementById('goalDebtSelect');
+  select.innerHTML = '<option value="">-- Selecciona una deuda --</option>';
+  
+  try {
+    const debts = await loadLiabilitiesForSelect();
+    
+    // Filtrar deudas que ya tienen meta activa
+    const goals = await getGoals();
+    const debtsWithGoals = goals.filter(g => g.linkedDebtId && g.isActive !== false).map(g => g.linkedDebtId);
+    
+    const availableDebts = debts.filter(d => !debtsWithGoals.includes(d.id));
+    
+    if (availableDebts.length === 0) {
+      select.innerHTML = '<option value="">No hay deudas disponibles</option>';
+      return;
+    }
+    
+    availableDebts.forEach(debt => {
+      const option = document.createElement('option');
+      option.value = debt.id;
+      option.textContent = `${debt.name} - $${debt.amount.toFixed(2)}`;
+      option.dataset.amount = debt.amount;
+      option.dataset.name = debt.name;
+      select.appendChild(option);
+    });
+    
+    // Agregar listener para mostrar info de deuda seleccionada
+    select.onchange = function() {
+      const selectedOption = this.options[this.selectedIndex];
+      const infoDiv = document.getElementById('selectedDebtInfo');
+      
+      if (this.value) {
+        document.getElementById('selectedDebtName').textContent = selectedOption.dataset.name;
+        document.getElementById('selectedDebtAmount').textContent = parseFloat(selectedOption.dataset.amount).toFixed(2);
+        infoDiv.style.display = 'block';
+      } else {
+        infoDiv.style.display = 'none';
+      }
+    };
+  } catch (error) {
+    console.error('Error cargando deudas:', error);
+    select.innerHTML = '<option value="">Error al cargar deudas</option>';
+  }
+}
+
+/**
+ * Cargar liabilities para el select (sin mostrar)
+ */
+async function loadLiabilitiesForSelect() {
+  if (!currentUser) return [];
+  
+  try {
+    const q = query(
+      collection(db, "liabilities"),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    const debts = [];
+    snapshot.forEach(doc => {
+      debts.push({ id: doc.id, ...doc.data() });
+    });
+    return debts;
+  } catch (error) {
+    console.error('Error en loadLiabilitiesForSelect:', error);
+    return [];
+  }
+}
+
+/**
+ * Poblar información de deudas para meta compuesta
+ */
+async function populateCompoundDebtInfo() {
+  try {
+    const debts = await loadLiabilitiesForSelect();
+    const totalDebt = debts.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+    
+    document.getElementById('compoundTotalDebt').textContent = totalDebt.toFixed(2);
+    
+    // Actualizar resumen cuando cambie el monto de ahorro
+    const savingsInput = document.getElementById('goalCompoundSavings');
+    savingsInput.oninput = function() {
+      const savings = parseFloat(this.value) || 0;
+      const total = totalDebt + savings;
+      document.getElementById('compoundTotalGoal').textContent = total.toFixed(2);
+      document.getElementById('compoundSummary').style.display = savings > 0 ? 'block' : 'none';
+    };
+  } catch (error) {
+    console.error('Error cargando info de deudas:', error);
+  }
+}
+
+/**
+ * Toggle entre input de fecha y meses para deuda
+ */
+window.toggleDebtDateInput = function () {
+  const dateType = document.getElementById('goalDebtDateType').value;
+  document.getElementById('debtDateInput').style.display = dateType === 'date' ? 'block' : 'none';
+  document.getElementById('debtMonthsInput').style.display = dateType === 'months' ? 'block' : 'none';
+};
+
+/**
+ * Crear meta desde el wizard
+ */
+window.createGoalFromWizard = async function () {
+  if (!currentUser) {
+    showMessage("Debes iniciar sesión", "error");
+    return;
+  }
+  
+  if (!selectedGoalType) {
+    showMessage("Por favor selecciona un tipo de meta", "error");
+    return;
+  }
+  
+  try {
+    showLoading("Creando meta...");
+    
+    let goalData = null;
+    
+    if (selectedGoalType === 'debt') {
+      goalData = await createDebtGoalFromWizard();
+    } else if (selectedGoalType === 'savings') {
+      goalData = await createSavingsGoalFromWizard();
+    } else if (selectedGoalType === 'compound') {
+      goalData = await createCompoundGoalFromWizard();
+    }
+    
+    if (!goalData) {
+      hideLoading();
+      return; // Error ya mostrado en la función específica
+    }
+    
+    await addDoc(collection(db, "goals"), goalData);
+    cache.clear("goals");
+    
+    // Limpiar wizard y volver al paso 1
+    resetGoalWizard();
+    await loadGoals();
+    
+    showMessage("✅ Meta creada exitosamente", "success");
+  } catch (error) {
+    showMessage("Error al crear meta: " + error.message, "error");
+    console.error("Error en createGoalFromWizard:", error);
+  } finally {
+    hideLoading();
+  }
+};
+
+/**
+ * Crear meta de deuda desde wizard
+ */
+async function createDebtGoalFromWizard() {
+  const debtId = document.getElementById('goalDebtSelect').value;
+  const dateType = document.getElementById('goalDebtDateType').value;
+  const targetBalance = parseFloat(document.getElementById('goalDebtTargetBalance').value) || 0;
+  
+  if (!debtId) {
+    showMessage("Por favor selecciona una deuda", "error");
+    return null;
+  }
+  
+  let deadline;
+  if (dateType === 'date') {
+    deadline = document.getElementById('goalDebtDeadline').value;
+    if (!deadline) {
+      showMessage("Por favor selecciona una fecha límite", "error");
+      return null;
+    }
+  } else {
+    const months = parseInt(document.getElementById('goalDebtMonths').value);
+    if (!months || months < 1) {
+      showMessage("Por favor ingresa una cantidad de meses válida", "error");
+      return null;
+    }
+    const futureDate = new Date();
+    futureDate.setMonth(futureDate.getMonth() + months);
+    deadline = futureDate.toISOString().split('T')[0];
+  }
+  
+  if (new Date(deadline) < new Date()) {
+    showMessage("La fecha límite debe ser en el futuro", "error");
+    return null;
+  }
+  
+  // Obtener info de la deuda
+  const selectedOption = document.getElementById('goalDebtSelect').options[document.getElementById('goalDebtSelect').selectedIndex];
+  const debtAmount = parseFloat(selectedOption.dataset.amount);
+  const debtName = selectedOption.dataset.name;
+  
+  return {
+    userId: currentUser.uid,
+    type: "debt",
+    name: `Pagar ${debtName}`,
+    linkedDebtId: debtId,
+    target: debtAmount - targetBalance, // Cuánto necesita pagar
+    current: 0,
+    deadline: deadline,
+    targetBalance: targetBalance,
+    isActive: true,
+    createdAt: Timestamp.now()
+  };
+}
+
+/**
+ * Crear meta de ahorro desde wizard
+ */
+async function createSavingsGoalFromWizard() {
+  const name = document.getElementById('goalSavingsName').value.trim();
+  const target = parseFloat(document.getElementById('goalSavingsTarget').value);
+  const deadline = document.getElementById('goalSavingsDeadline').value;
+  
+  if (!name) {
+    showMessage("Por favor ingresa un nombre para la meta", "error");
+    return null;
+  }
+  
+  if (!target || target <= 0) {
+    showMessage("Por favor ingresa un monto objetivo válido", "error");
+    return null;
+  }
+  
+  if (!deadline) {
+    showMessage("Por favor selecciona una fecha límite", "error");
+    return null;
+  }
+  
+  if (new Date(deadline) < new Date()) {
+    showMessage("La fecha límite debe ser en el futuro", "error");
+    return null;
+  }
+  
+  return {
+    userId: currentUser.uid,
+    type: "savings",
+    name: name,
+    target: target,
+    current: 0,
+    deadline: deadline,
+    isActive: true,
+    createdAt: Timestamp.now()
+  };
+}
+
+/**
+ * Crear meta compuesta desde wizard
+ */
+async function createCompoundGoalFromWizard() {
+  const name = document.getElementById('goalCompoundName').value.trim();
+  const savingsTarget = parseFloat(document.getElementById('goalCompoundSavings').value) || 0;
+  const deadline = document.getElementById('goalCompoundDeadline').value;
+  
+  if (!name) {
+    showMessage("Por favor ingresa un nombre para la meta", "error");
+    return null;
+  }
+  
+  if (!deadline) {
+    showMessage("Por favor selecciona una fecha límite", "error");
+    return null;
+  }
+  
+  if (new Date(deadline) < new Date()) {
+    showMessage("La fecha límite debe ser en el futuro", "error");
+    return null;
+  }
+  
+  // Obtener total de deudas
+  const debts = await loadLiabilitiesForSelect();
+  const totalDebt = debts.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+  const debtIds = debts.map(d => d.id);
+  
+  if (totalDebt <= 0 && savingsTarget <= 0) {
+    showMessage("La meta debe tener al menos deudas o un monto de ahorro", "error");
+    return null;
+  }
+  
+  return {
+    userId: currentUser.uid,
+    type: "compound",
+    name: name,
+    target: totalDebt + savingsTarget,
+    current: 0,
+    deadline: deadline,
+    linkedDebtIds: debtIds,
+    savingsTarget: savingsTarget,
+    debtTarget: totalDebt,
+    isActive: true,
+    createdAt: Timestamp.now()
+  };
+}
+
+/**
+ * Resetear el wizard de metas
+ */
+function resetGoalWizard() {
+  selectedGoalType = null;
+  goToGoalStep(1);
+  
+  // Limpiar formularios
+  document.getElementById('goalDebtSelect').value = '';
+  document.getElementById('selectedDebtInfo').style.display = 'none';
+  document.getElementById('goalDebtDeadline').value = '';
+  document.getElementById('goalDebtMonths').value = '';
+  document.getElementById('goalDebtTargetBalance').value = '0';
+  document.getElementById('goalDebtDateType').value = 'date';
+  toggleDebtDateInput();
+  
+  document.getElementById('goalSavingsName').value = '';
+  document.getElementById('goalSavingsTarget').value = '';
+  document.getElementById('goalSavingsDeadline').value = '';
+  
+  document.getElementById('goalCompoundName').value = '';
+  document.getElementById('goalCompoundSavings').value = '';
+  document.getElementById('goalCompoundDeadline').value = '';
+  document.getElementById('compoundSummary').style.display = 'none';
+}
+
+// Mantener función legacy para compatibilidad
 window.createGoal = async function () {
-  const name = document.getElementById("goalName").value;
-  const target = parseFloat(document.getElementById("goalTarget").value);
-  const deadline = document.getElementById("goalDeadline").value;
+  // Redirigir al wizard si los campos viejos no existen
+  const nameEl = document.getElementById("goalName");
+  const targetEl = document.getElementById("goalTarget");
+  const deadlineEl = document.getElementById("goalDeadline");
+  
+  if (!nameEl || !targetEl || !deadlineEl) {
+    showMessage("Por favor usa el wizard para crear metas", "info");
+    return;
+  }
+  
+  const name = nameEl.value;
+  const target = parseFloat(targetEl.value);
+  const deadline = deadlineEl.value;
 
   const errors = validateForm(
     { name, target, deadline },
@@ -2746,14 +3141,16 @@ window.createGoal = async function () {
       target: target,
       current: 0,
       deadline: deadline,
+      type: "savings",
+      isActive: true,
       createdAt: Timestamp.now(),
     };
 
     await addDoc(collection(db, "goals"), goalData);
     cache.clear("goals");
-    document.getElementById("goalName").value = "";
-    document.getElementById("goalTarget").value = "";
-    document.getElementById("goalDeadline").value = "";
+    nameEl.value = "";
+    targetEl.value = "";
+    deadlineEl.value = "";
     await loadGoals();
     showMessage("✅ Meta creada exitosamente", "success");
   } catch (error) {
