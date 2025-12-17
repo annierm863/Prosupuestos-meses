@@ -2008,6 +2008,34 @@ document.getElementById("updateDebtModal")?.addEventListener("click", function (
 });
 
 // ============= RESUMEN MENSUAL (LAZY LOADING) =============
+
+// Variable global para el año seleccionado en el grid de meses
+let selectedGridYear = new Date().getFullYear();
+
+/**
+ * Cambia el año mostrado en el grid de meses
+ */
+window.changeYear = function(delta) {
+  const currentYear = new Date().getFullYear();
+  const minYear = 2020; // Año mínimo permitido
+  const maxYear = currentYear + 1; // Permitir hasta el próximo año
+  
+  const newYear = selectedGridYear + delta;
+  
+  if (newYear < minYear) {
+    showMessage(`El año mínimo es ${minYear}`, "warning");
+    return;
+  }
+  
+  if (newYear > maxYear) {
+    showMessage(`El año máximo es ${maxYear}`, "warning");
+    return;
+  }
+  
+  selectedGridYear = newYear;
+  generateMonthGrid();
+};
+
 function generateMonthGrid() {
   const months = [
     "Enero",
@@ -2025,17 +2053,33 @@ function generateMonthGrid() {
   ];
 
   const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
+  const displayYear = selectedGridYear || currentYear;
+
+  // Actualizar el display del año
+  const yearDisplay = document.getElementById("currentYearDisplay");
+  if (yearDisplay) {
+    yearDisplay.textContent = displayYear;
+  }
 
   const grid = document.getElementById("monthGrid");
   grid.innerHTML = months
-    .map(
-      (month, index) => `
-      <div class="month-card" onclick="selectMonth(${index}, ${currentYear})">
+    .map((month, index) => {
+      // Determinar si es el mes actual
+      const isCurrentMonth = displayYear === currentYear && index === currentMonth;
+      // Determinar si es un mes futuro
+      const isFutureMonth = displayYear > currentYear || (displayYear === currentYear && index > currentMonth);
+      
+      return `
+      <div class="month-card ${isCurrentMonth ? 'current-month' : ''} ${isFutureMonth ? 'future-month' : ''}" 
+           onclick="selectMonth(${index}, ${displayYear})"
+           style="${isCurrentMonth ? 'border: 2px solid #3b82f6; background: #eff6ff;' : ''} ${isFutureMonth ? 'opacity: 0.6;' : ''}">
         <div class="month-card-name">${month}</div>
-        <div class="month-card-year">${currentYear}</div>
+        <div class="month-card-year">${displayYear}</div>
+        ${isCurrentMonth ? '<div style="font-size: 10px; color: #3b82f6; margin-top: 5px;">📍 Actual</div>' : ''}
       </div>
-    `
-    )
+    `;
+    })
     .join("");
 }
 
