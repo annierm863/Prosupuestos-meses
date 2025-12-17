@@ -3099,66 +3099,10 @@ function resetGoalWizard() {
   document.getElementById('compoundSummary').style.display = 'none';
 }
 
-// Mantener función legacy para compatibilidad
-window.createGoal = async function () {
-  // Redirigir al wizard si los campos viejos no existen
-  const nameEl = document.getElementById("goalName");
-  const targetEl = document.getElementById("goalTarget");
-  const deadlineEl = document.getElementById("goalDeadline");
-  
-  if (!nameEl || !targetEl || !deadlineEl) {
-    showMessage("Por favor usa el wizard para crear metas", "info");
-    return;
-  }
-  
-  const name = nameEl.value;
-  const target = parseFloat(targetEl.value);
-  const deadline = deadlineEl.value;
-
-  const errors = validateForm(
-    { name, target, deadline },
-    {
-      name: { required: true, label: "Nombre de la meta" },
-      target: { required: true, min: 0.01, label: "Monto objetivo" },
-      deadline: { required: true, type: "date", label: "Fecha límite" },
-    }
-  );
-
-  if (deadline && new Date(deadline) < new Date()) {
-    errors.push("La fecha límite debe ser en el futuro");
-  }
-
-  if (errors.length > 0) {
-    showMessage(errors.join(", "), "warning");
-    return;
-  }
-
-  try {
-    showLoading("Creando meta...");
-    const goalData = {
-      userId: currentUser.uid,
-      name: name.trim(),
-      target: target,
-      current: 0,
-      deadline: deadline,
-      type: "savings",
-      isActive: true,
-      createdAt: Timestamp.now(),
-    };
-
-    await addDoc(collection(db, "goals"), goalData);
-    cache.clear("goals");
-    nameEl.value = "";
-    targetEl.value = "";
-    deadlineEl.value = "";
-    await loadGoals();
-    showMessage("✅ Meta creada exitosamente", "success");
-  } catch (error) {
-    showMessage("Error al crear meta: " + error.message, "error");
-    console.error("Error en createGoal:", error);
-  } finally {
-    hideLoading();
-  }
+// Función legacy para compatibilidad - redirige al wizard
+window.createGoal = function () {
+  showMessage("Por favor usa el wizard para crear metas", "info");
+  goToGoalStep(1);
 };
 
 async function loadGoals() {
@@ -3226,7 +3170,10 @@ async function getGoals() {
 async function displayGoals(goals) {
   const container = document.getElementById("goalsList");
 
-  if (goals.length === 0) {
+  // Filtrar metas archivadas
+  const activeGoals = goals.filter(g => g.isArchived !== true);
+
+  if (activeGoals.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">🎯</div>
@@ -3237,7 +3184,7 @@ async function displayGoals(goals) {
   }
 
   // Enriquecer metas con cálculos (compatible con metas existentes)
-  const enrichedGoals = enrichGoalsWithCalculations(goals);
+  const enrichedGoals = enrichGoalsWithCalculations(activeGoals);
 
   // Calcular ritmo y proyección para cada meta (Fase 3)
   const goalsWithRitmo = await Promise.all(
@@ -3356,10 +3303,11 @@ async function displayGoals(goals) {
           </div>
           
           <!-- Botones de acción -->
-          <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px; width: 100%;">
+          <div style="display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; width: 100%;">
             ${primaryCTA}
-            <button class="btn-small" style="background: #3b82f6; color: white;" onclick="editGoal('${goal.id}')">✏️</button>
-            <button class="btn-small btn-danger" onclick="deleteGoal('${goal.id}')">🗑️</button>
+            <button class="btn-small" style="background: #6366f1; color: white;" onclick="showGoalDetails('${goal.id}')" title="Ver detalles">👁️</button>
+            <button class="btn-small" style="background: #3b82f6; color: white;" onclick="editGoal('${goal.id}')" title="Editar">✏️</button>
+            <button class="btn-small btn-danger" onclick="deleteGoal('${goal.id}')" title="Eliminar">🗑️</button>
           </div>
         </div>
       `;
@@ -3576,61 +3524,152 @@ window.showGoalDetails = async function (goalId) {
     }
 
     const goal = { id: goalDoc.id, ...goalDoc.data() };
-    
-    // Si no es compuesta, mostrar mensaje
-    if (goal.type !== "compound") {
-      showMessage("Esta función solo está disponible para metas compuestas", "info");
-      return;
-    }
+    const enriched = enrichGoalWithCalculations(goal);
 
     // Obtener transacciones
     const transactions = await getGoalTransactions(goalId);
     const projection = await calculateGoalProjection(goalId);
     const ritmo = await calculateGoalRitmo(goalId, 'week');
+    
+    // Calcular datos adicionales
+    const progress = ((goal.current || 0) / goal.target * 100).toFixed(1);
+    const remaining = Math.max(0, goal.target - (goal.current || 0));
+    const daysLeft = Math.ceil((new Date(goal.deadline) - new Date()) / (1000 * 60 * 60 * 24));
+    const weeksLeft = Math.max(1, Math.ceil(daysLeft / 7));
+    const requiredWeekly = remaining > 0 && daysLeft > 0 ? remaining / weeksLeft : 0;
 
-    // Obtener metas relacionadas si existen
-    const allGoals = await getGoals();
-    const relatedGoals = allGoals.filter(g => 
-      (g.type === "debt" && goal.linkedDebtIds?.includes(g.linkedDebtId)) ||
-      (g.type === "savings" && goal.linkedSavingsGoalIds?.includes(g.id))
-    );
+    // Obtener metas relacionadas si es compuesta
+    let relatedGoals = [];
+    if (goal.type === "compound" && goal.linkedDebtIds) {
+      const allGoals = await getGoals();
+      relatedGoals = allGoals.filter(g => 
+        (g.type === "debt" && goal.linkedDebtIds?.includes(g.linkedDebtId)) ||
+        (g.type === "savings" && goal.linkedSavingsGoalIds?.includes(g.id))
+      );
+    }
+
+    // Determinar color según status
+    let statusColor = "#8b5cf6";
+    let statusText = "Activa";
+    if (enriched.status === "EN_RUTA") { statusColor = "#10b981"; statusText = "En Ruta"; }
+    else if (enriched.status === "RIESGO") { statusColor = "#f59e0b"; statusText = "En Riesgo"; }
+    else if (enriched.status === "ATRASADA") { statusColor = "#ef4444"; statusText = "Atrasada"; }
+    else if (enriched.status === "COMPLETADA") { statusColor = "#6366f1"; statusText = "Completada"; }
+
+    // Tipo de meta icon
+    const typeIcon = goal.type === "debt" ? "💳" : goal.type === "compound" ? "🎯" : "💰";
+    const typeText = goal.type === "debt" ? "Meta de Deuda" : goal.type === "compound" ? "Meta Compuesta" : "Meta de Ahorro";
 
     // Crear modal de detalles
     const modalHTML = `
       <div class="modal active" id="goalDetailsModal">
-        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
-          <div class="modal-header">
-            <h3>📋 Detalles de Meta: ${goal.name}</h3>
-            <button class="close-modal" onclick="closeGoalDetailsModal()">×</button>
+        <div class="modal-content" style="max-width: 850px; max-height: 90vh; overflow-y: auto;">
+          <div class="modal-header" style="background: linear-gradient(135deg, ${statusColor}, ${statusColor}dd); color: white;">
+            <h3 style="color: white;">${typeIcon} ${goal.name}</h3>
+            <button class="close-modal" onclick="closeGoalDetailsModal()" style="color: white;">×</button>
           </div>
           <div style="padding: 20px;">
-            <!-- Información general -->
+            
+            <!-- Header con progreso -->
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
+              <div style="font-size: 48px; font-weight: bold; color: ${statusColor}; margin-bottom: 5px;">${progress}%</div>
+              <div style="background: #e5e7eb; height: 12px; border-radius: 6px; overflow: hidden; margin: 10px 0;">
+                <div style="background: ${statusColor}; height: 100%; width: ${Math.min(progress, 100)}%; transition: width 0.5s;"></div>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px; color: #666;">
+                <span>$0</span>
+                <span style="font-weight: 600; color: ${statusColor};">$${(goal.current || 0).toFixed(2)} de $${goal.target.toFixed(2)}</span>
+                <span>$${goal.target.toFixed(2)}</span>
+              </div>
+            </div>
+            
+            <!-- Información en grid -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 5px;">Estado</div>
+                <div style="font-size: 14px; font-weight: 600; color: ${statusColor};">${statusText}</div>
+              </div>
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 5px;">Falta</div>
+                <div style="font-size: 14px; font-weight: 600; color: #333;">$${remaining.toFixed(2)}</div>
+              </div>
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 5px;">Días Restantes</div>
+                <div style="font-size: 14px; font-weight: 600; color: ${daysLeft < 30 ? '#ef4444' : '#333'};">${Math.max(0, daysLeft)}</div>
+              </div>
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 5px;">Tipo</div>
+                <div style="font-size: 14px; font-weight: 600; color: #333;">${typeText}</div>
+              </div>
+            </div>
+            
+            <!-- Ritmo y proyección -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+              <div style="background: #eff6ff; padding: 15px; border-radius: 10px; border-left: 4px solid #3b82f6;">
+                <h4 style="margin: 0 0 10px 0; color: #1e40af; font-size: 14px;">📊 Ritmo de Avance</h4>
+                <div style="font-size: 13px; color: #333;">
+                  <p style="margin: 5px 0;"><strong>Requerido/semana:</strong> $${requiredWeekly.toFixed(2)}</p>
+                  <p style="margin: 5px 0;"><strong>Tu ritmo actual:</strong> 
+                    <span style="color: ${ritmo >= requiredWeekly ? '#10b981' : '#ef4444'};">$${ritmo.toFixed(2)}/semana</span>
+                  </p>
+                  <p style="margin: 5px 0;"><strong>Requerido/mes:</strong> $${(requiredWeekly * 4.33).toFixed(2)}</p>
+                </div>
+              </div>
+              
+              <div style="background: ${projection?.onTime ? '#d1fae5' : '#fee2e2'}; padding: 15px; border-radius: 10px; border-left: 4px solid ${projection?.onTime ? '#10b981' : '#ef4444'};">
+                <h4 style="margin: 0 0 10px 0; color: ${projection?.onTime ? '#065f46' : '#991b1b'}; font-size: 14px;">🔮 Proyección</h4>
+                <p style="margin: 0; font-size: 13px; color: ${projection?.onTime ? '#065f46' : '#991b1b'};">
+                  ${projection?.message || 'No hay datos suficientes para proyectar.'}
+                </p>
+                ${projection?.estimatedDate ? `
+                  <p style="margin: 10px 0 0 0; font-size: 12px; color: #666;">
+                    Fecha estimada: ${new Date(projection.estimatedDate).toLocaleDateString('es-ES')}
+                  </p>
+                ` : ''}
+              </div>
+            </div>
+            
+            <!-- Botones de acción -->
             <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-              <h4 style="margin: 0 0 10px 0; color: #333;">Información General</h4>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">
-                <div><strong>Progreso:</strong> ${((goal.current || 0) / goal.target * 100).toFixed(1)}%</div>
-                <div><strong>Falta:</strong> $${Math.max(0, goal.target - (goal.current || 0)).toFixed(2)}</div>
-                <div><strong>Fecha límite:</strong> ${new Date(goal.deadline).toLocaleDateString('es-ES')}</div>
-                <div><strong>Ritmo actual:</strong> $${ritmo.toFixed(2)}/semana</div>
+              <h4 style="margin: 0 0 15px 0; color: #333; font-size: 14px;">⚡ Acciones Rápidas</h4>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                ${goal.type === "debt" && goal.linkedDebtId ? `
+                  <button onclick="closeGoalDetailsModal(); registerPayment('${goal.linkedDebtId}');" 
+                          style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                    💰 Registrar Pago
+                  </button>
+                ` : goal.type !== "compound" ? `
+                  <button onclick="closeGoalDetailsModal(); showContributionModal('${goalId}');" 
+                          style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                    💰 Registrar Aporte
+                  </button>
+                  <button onclick="showWithdrawalModal('${goalId}');" 
+                          style="padding: 10px 20px; background: #f59e0b; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                    💸 Retiro
+                  </button>
+                ` : ''}
+                <button onclick="toggleGoalActive('${goalId}', ${goal.isActive !== false});" 
+                        style="padding: 10px 20px; background: ${goal.isActive !== false ? '#6b7280' : '#3b82f6'}; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                  ${goal.isActive !== false ? '⏸️ Pausar' : '▶️ Activar'}
+                </button>
+                <button onclick="archiveGoal('${goalId}');" 
+                        style="padding: 10px 20px; background: #374151; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                  📦 Archivar
+                </button>
               </div>
             </div>
 
-            <!-- Proyección -->
-            ${projection && projection.message ? `
-              <div style="background: ${projection.onTime ? '#d1fae5' : '#fee2e2'}; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                <h4 style="margin: 0 0 10px 0; color: ${projection.onTime ? '#065f46' : '#991b1b'};">📊 Proyección</h4>
-                <p style="margin: 0; color: ${projection.onTime ? '#065f46' : '#991b1b'};">${projection.message}</p>
-              </div>
-            ` : ''}
-
-            <!-- Metas relacionadas -->
-            ${relatedGoals.length > 0 ? `
+            <!-- Metas relacionadas (solo compuestas) -->
+            ${goal.type === "compound" && relatedGoals.length > 0 ? `
               <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                <h4 style="margin: 0 0 10px 0; color: #333;">Metas Componentes</h4>
+                <h4 style="margin: 0 0 10px 0; color: #333; font-size: 14px;">🔗 Metas Componentes</h4>
                 <div style="display: flex; flex-direction: column; gap: 8px;">
                   ${relatedGoals.map(g => `
-                    <div style="background: white; padding: 10px; border-radius: 5px;">
-                      <strong>${g.name}</strong> - ${((g.current || 0) / g.target * 100).toFixed(1)}%
+                    <div style="background: white; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                      <span><strong>${g.name}</strong></span>
+                      <span style="color: ${(g.current || 0) >= g.target ? '#10b981' : '#666'}; font-weight: 600;">
+                        ${((g.current || 0) / g.target * 100).toFixed(1)}%
+                      </span>
                     </div>
                   `).join('')}
                 </div>
@@ -3639,39 +3678,48 @@ window.showGoalDetails = async function (goalId) {
 
             <!-- Historial de transacciones -->
             <div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">
-              <h4 style="margin: 0 0 10px 0; color: #333;">Historial de Transacciones</h4>
+              <h4 style="margin: 0 0 15px 0; color: #333; font-size: 14px;">📜 Historial de Movimientos</h4>
               ${transactions.length > 0 ? `
-                <div style="max-height: 300px; overflow-y: auto;">
+                <div style="max-height: 300px; overflow-y: auto; background: white; border-radius: 8px;">
                   <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
                     <thead>
-                      <tr style="background: white; border-bottom: 2px solid #e5e7eb;">
-                        <th style="padding: 8px; text-align: left;">Fecha</th>
-                        <th style="padding: 8px; text-align: left;">Tipo</th>
-                        <th style="padding: 8px; text-align: right;">Monto</th>
-                        <th style="padding: 8px; text-align: left;">Notas</th>
+                      <tr style="background: #f8f9fa; border-bottom: 2px solid #e5e7eb; position: sticky; top: 0;">
+                        <th style="padding: 12px 8px; text-align: left;">Fecha</th>
+                        <th style="padding: 12px 8px; text-align: left;">Tipo</th>
+                        <th style="padding: 12px 8px; text-align: right;">Monto</th>
+                        <th style="padding: 12px 8px; text-align: left;">Notas</th>
                       </tr>
                     </thead>
                     <tbody>
                       ${transactions.map(t => `
                         <tr style="border-bottom: 1px solid #e5e7eb;">
-                          <td style="padding: 8px;">${new Date(t.date).toLocaleDateString('es-ES')}</td>
-                          <td style="padding: 8px;">
+                          <td style="padding: 10px 8px;">${new Date(t.date).toLocaleDateString('es-ES')}</td>
+                          <td style="padding: 10px 8px;">
                             ${t.type === "debt_payment" ? "💳 Pago" : 
                               t.type === "savings_contribution" ? "💰 Aporte" : 
                               t.type === "withdrawal" ? "💸 Retiro" : "⚙️ Ajuste"}
                           </td>
-                          <td style="padding: 8px; text-align: right; font-weight: 600; color: ${t.type === "withdrawal" ? "#ef4444" : "#10b981"}">
+                          <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: ${t.type === "withdrawal" ? "#ef4444" : "#10b981"}">
                             ${t.type === "withdrawal" ? "-" : "+"}$${Math.abs(t.amount).toFixed(2)}
                           </td>
-                          <td style="padding: 8px; color: #666;">${t.notes || "-"}</td>
+                          <td style="padding: 10px 8px; color: #666; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${t.notes || "-"}
+                          </td>
                         </tr>
                       `).join('')}
                     </tbody>
                   </table>
                 </div>
               ` : `
-                <p style="color: #666; margin: 0;">No hay transacciones registradas aún.</p>
+                <div style="background: white; padding: 30px; border-radius: 8px; text-align: center;">
+                  <p style="color: #666; margin: 0;">📭 No hay movimientos registrados aún.</p>
+                </div>
               `}
+            </div>
+            
+            <!-- Info adicional -->
+            <div style="margin-top: 15px; padding: 10px; background: #f0fdf4; border-radius: 8px; font-size: 11px; color: #166534; text-align: center;">
+              📅 Fecha límite: ${new Date(goal.deadline).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
           </div>
         </div>
@@ -3701,6 +3749,136 @@ window.closeGoalDetailsModal = function () {
   if (modal) {
     modal.remove();
   }
+};
+
+/**
+ * Muestra modal para realizar un retiro de una meta de ahorro
+ */
+window.showWithdrawalModal = async function (goalId) {
+  if (!currentUser || !goalId) return;
+
+  try {
+    const goalDoc = await getDoc(doc(db, "goals", goalId));
+    if (!goalDoc.exists()) {
+      showMessage("Meta no encontrada", "error");
+      return;
+    }
+
+    const goal = { id: goalDoc.id, ...goalDoc.data() };
+    const available = goal.current || 0;
+
+    if (available <= 0) {
+      showMessage("No hay fondos disponibles para retirar", "warning");
+      return;
+    }
+
+    showInputModal(
+      `Retiro de "${goal.name}"`,
+      `Monto a retirar (Disponible: $${available.toFixed(2)}):`,
+      "",
+      async (amountStr) => {
+        if (!amountStr) return;
+
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+          showMessage("Por favor ingresa un monto válido", "error");
+          return;
+        }
+
+        if (amount > available) {
+          showMessage(`No puedes retirar más de $${available.toFixed(2)}`, "warning");
+          return;
+        }
+
+        try {
+          showLoading("Procesando retiro...");
+          const today = new Date().toISOString().split("T")[0];
+          await recordManualWithdrawal(goalId, amount, today, `Retiro manual de ${goal.name}`);
+          
+          closeGoalDetailsModal();
+          cache.clear("goals");
+          await loadGoals();
+          showMessage(`✅ Retiro de $${amount.toFixed(2)} realizado`, "success");
+        } catch (error) {
+          showMessage("Error: " + error.message, "error");
+        } finally {
+          hideLoading();
+        }
+      }
+    );
+  } catch (error) {
+    showMessage("Error al cargar meta: " + error.message, "error");
+  }
+};
+
+/**
+ * Pausar o activar una meta
+ */
+window.toggleGoalActive = async function (goalId, currentlyActive) {
+  if (!currentUser || !goalId) return;
+
+  const action = currentlyActive ? "pausar" : "activar";
+  
+  showConfirmModal(
+    `¿Deseas ${action} esta meta?`,
+    `${currentlyActive ? '⏸️' : '▶️'} ${action.charAt(0).toUpperCase() + action.slice(1)} Meta`,
+    async (confirmed) => {
+      if (!confirmed) return;
+
+      try {
+        showLoading(`${currentlyActive ? 'Pausando' : 'Activando'} meta...`);
+        
+        await updateDoc(doc(db, "goals", goalId), {
+          isActive: !currentlyActive,
+          updatedAt: Timestamp.now()
+        });
+
+        closeGoalDetailsModal();
+        cache.clear("goals");
+        await loadGoals();
+        showMessage(`✅ Meta ${currentlyActive ? 'pausada' : 'activada'}`, "success");
+      } catch (error) {
+        showMessage("Error: " + error.message, "error");
+      } finally {
+        hideLoading();
+      }
+    }
+  );
+};
+
+/**
+ * Archivar una meta (marcarla como completada o archivada)
+ */
+window.archiveGoal = async function (goalId) {
+  if (!currentUser || !goalId) return;
+
+  showConfirmModal(
+    "¿Deseas archivar esta meta? Podrás verla en el historial pero no aparecerá en la lista activa.",
+    "📦 Archivar Meta",
+    async (confirmed) => {
+      if (!confirmed) return;
+
+      try {
+        showLoading("Archivando meta...");
+        
+        await updateDoc(doc(db, "goals", goalId), {
+          isActive: false,
+          isArchived: true,
+          archivedAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        });
+
+        closeGoalDetailsModal();
+        cache.clear("goals");
+        await loadGoals();
+        showMessage("✅ Meta archivada", "success");
+      } catch (error) {
+        showMessage("Error: " + error.message, "error");
+      } finally {
+        hideLoading();
+      }
+    }
+  );
 };
 
 /**
