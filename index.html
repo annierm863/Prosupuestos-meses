@@ -718,6 +718,9 @@
         <div id="goals" class="section">
           <h2>🎯 Metas</h2>
 
+          <!-- Dashboard de Salud del Plan (Fase 2) -->
+          <div id="actionPlanHealthDashboard" style="display: none; margin-bottom: 20px;"></div>
+
           <!-- Wizard de Creación de Meta -->
           <div id="goalWizard" style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
             
@@ -726,7 +729,7 @@
               <h3 style="margin-bottom: 15px;">✨ Crear Nueva Meta</h3>
               <p style="color: #666; margin-bottom: 20px;">Selecciona el tipo de meta que deseas crear:</p>
               
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
                 <!-- Opción: Deuda -->
                 <div onclick="selectGoalType('debt')" class="goal-type-card" id="goalTypeDebt" 
                      style="background: white; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; border: 2px solid #e5e7eb; transition: all 0.3s ease;">
@@ -749,6 +752,14 @@
                   <div style="font-size: 40px; margin-bottom: 10px;">🎯</div>
                   <h4 style="margin: 0 0 8px 0; color: #333;">Meta Compuesta</h4>
                   <p style="font-size: 12px; color: #666; margin: 0;">Pagar todas las deudas + ahorrar un monto</p>
+                </div>
+                
+                <!-- Opción: Proyecto/Activo (NUEVA) -->
+                <div onclick="selectGoalType('project')" class="goal-type-card" id="goalTypeProject"
+                     style="background: white; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; border: 2px solid #e5e7eb; transition: all 0.3s ease;">
+                  <div style="font-size: 40px; margin-bottom: 10px;">🚀</div>
+                  <h4 style="margin: 0 0 8px 0; color: #333;">Proyecto / Activo</h4>
+                  <p style="font-size: 12px; color: #666; margin: 0;">Grandes metas con plan de acción (terreno, casa, negocio)</p>
                 </div>
               </div>
             </div>
@@ -835,6 +846,70 @@
                 <div id="compoundSummary" style="background: #d1fae5; padding: 15px; border-radius: 8px; margin-top: 15px; display: none;">
                   <p style="margin: 0; font-size: 14px;"><strong>📊 Resumen de Meta:</strong></p>
                   <p style="margin: 5px 0 0 0; font-size: 14px;">Total: $<span id="compoundTotalGoal">0.00</span> (Deudas + Ahorro)</p>
+                </div>
+              </div>
+              
+              <!-- Formulario Proyecto/Activo (NUEVO) -->
+              <div id="goalFormProject" style="display: none;">
+                <div style="background: #dbeafe; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #3b82f6;">
+                  <p style="margin: 0; font-size: 14px; color: #1e40af;">
+                    <strong>🚀 Meta Proyecto:</strong> Para grandes objetivos como comprar un terreno, casa, vehículo o iniciar un negocio. Incluye plan de acción detallado.
+                  </p>
+                </div>
+                
+                <div class="form-group">
+                  <label>Nombre del Proyecto:</label>
+                  <input type="text" id="goalProjectName" placeholder="Ej: Comprar terreno en las afueras" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+                </div>
+                
+                <div class="form-group">
+                  <label>Categoría:</label>
+                  <select id="goalProjectCategory" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;">
+                    <option value="real_estate">🏡 Bienes Raíces</option>
+                    <option value="business">💼 Negocio</option>
+                    <option value="vehicle">🚗 Vehículo</option>
+                    <option value="education">📚 Educación</option>
+                    <option value="travel">✈️ Viaje</option>
+                    <option value="other">📦 Otro</option>
+                  </select>
+                </div>
+                
+                <div class="form-group">
+                  <label>Icono (emoji opcional):</label>
+                  <input type="text" id="goalProjectIcon" placeholder="🏡" maxlength="2" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+                  <small style="color: #666; font-size: 11px;">Ej: 🏡 🚗 💼 ✈️ 📚</small>
+                </div>
+                
+                <div class="form-group">
+                  <label>Monto Objetivo:</label>
+                  <input type="number" id="goalProjectTarget" placeholder="50000.00" step="0.01" min="0" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+                </div>
+                
+                <div class="form-group">
+                  <label>Fecha Objetivo:</label>
+                  <input type="date" id="goalProjectDeadline" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+                </div>
+                
+                <div class="form-group">
+                  <label>Prioridad:</label>
+                  <select id="goalProjectPriority" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;">
+                    <option value="low">🟢 Baja</option>
+                    <option value="medium" selected>🟡 Media</option>
+                    <option value="high">🟠 Alta</option>
+                    <option value="critical">🔴 Crítica</option>
+                  </select>
+                </div>
+                
+                <div class="form-group">
+                  <label>Descripción (opcional):</label>
+                  <textarea id="goalProjectDescription" placeholder="Describe tu proyecto..." rows="3" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; resize: vertical;"></textarea>
+                </div>
+                
+                <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                  <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #0369a1;">📋 Plan de Acción</p>
+                  <p style="margin: 0 0 10px 0; font-size: 12px; color: #666;">
+                    Después de crear la meta, podrás agregar acciones específicas como "Aumentar ingresos", "Reducir gastos", "Meta de ventas", etc.
+                  </p>
                 </div>
               </div>
               
@@ -1470,6 +1545,170 @@
             <button onclick="closeEditGoalModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancelar</button>
             <button onclick="confirmEditGoal()" style="flex: 1; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Guardar Cambios</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para agregar/editar acciones del plan -->
+    <div id="actionModal" class="modal">
+      <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+          <h3 id="actionModalTitle">➕ Nueva Acción del Plan</h3>
+          <button class="close-modal" onclick="closeActionModal()">×</button>
+        </div>
+        <div style="padding: 20px;">
+          <div style="background: #dbeafe; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+            <p style="color: #1e40af; margin: 0; font-size: 13px;">
+              <strong>💡 Tip:</strong> Las acciones con métricas medibles te permiten hacer seguimiento del progreso automático.
+            </p>
+          </div>
+          
+          <div class="form-group">
+            <label>Tipo de Acción:</label>
+            <select id="actionType" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;">
+              <option value="increase_income">📈 Aumentar Ingresos</option>
+              <option value="reduce_expenses">💸 Reducir Gastos</option>
+              <option value="sales_target">💰 Meta de Ventas</option>
+              <option value="custom">📝 Personalizada</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Título de la Acción:</label>
+            <input type="text" id="actionTitle" placeholder="Ej: Freelance diseño web" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+          </div>
+          
+          <div class="form-group">
+            <label>Descripción:</label>
+            <textarea id="actionDescription" placeholder="Describe qué vas a hacer..." rows="2" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; resize: vertical;"></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="actionHasMetric" onchange="toggleActionMetric()" />
+              <span>¿Tiene métrica medible?</span>
+            </label>
+          </div>
+          
+          <!-- Sección de Métrica (oculta por defecto) -->
+          <div id="actionMetricSection" style="display: none; background: #f0f9ff; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 15px 0; color: #0369a1; font-size: 14px;">📊 Configurar Métrica</h4>
+            
+            <div class="form-group">
+              <label>Tipo de Métrica:</label>
+              <select id="actionMetricType" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;">
+                <option value="monthly_amount">💵 Monto Mensual (ej: $3,000/mes)</option>
+                <option value="one_time_amount">💰 Monto Único (ej: $5,000 una vez)</option>
+                <option value="percentage_reduction">📉 Reducción Porcentual (ej: -20%)</option>
+                <option value="unit_count">📦 Cantidad de Unidades (ej: 30 productos)</option>
+              </select>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="form-group">
+                <label>Objetivo:</label>
+                <input type="number" id="actionMetricTarget" placeholder="3000" step="0.01" min="0" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+              </div>
+              
+              <div class="form-group">
+                <label>Actual:</label>
+                <input type="number" id="actionMetricCurrent" placeholder="0" step="0.01" min="0" value="0" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Estrategia (opcional):</label>
+            <textarea id="actionStrategy" placeholder="¿Cómo vas a lograr esta acción?" rows="2" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; resize: vertical;"></textarea>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label>Fecha de Inicio:</label>
+              <input type="date" id="actionStartDate" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+            </div>
+            
+            <div class="form-group">
+              <label>Fecha Objetivo:</label>
+              <input type="date" id="actionTargetDate" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="closeActionModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancelar</button>
+            <button onclick="saveAction()" style="flex: 2; padding: 12px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">💾 Guardar Acción</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para actualizar progreso de acción -->
+    <div id="updateActionModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3>📈 Actualizar Progreso</h3>
+          <button class="close-modal" onclick="closeUpdateActionModal()">×</button>
+        </div>
+        <div style="padding: 20px;">
+          <div id="updateActionInfo" style="background: #f0f9ff; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+            <p style="margin: 0; font-size: 14px;"><strong id="updateActionName">Acción</strong></p>
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">Progreso actual: <span id="updateActionCurrent">0</span> / <span id="updateActionTarget">100</span></p>
+          </div>
+          
+          <div class="form-group">
+            <label>Nuevo Valor:</label>
+            <input type="number" id="updateActionValue" placeholder="0" step="0.01" min="0" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" />
+          </div>
+          
+          <div class="form-group">
+            <label>Nota (opcional):</label>
+            <textarea id="updateActionNote" placeholder="¿Qué lograste?" rows="2" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; resize: vertical;"></textarea>
+          </div>
+          
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="closeUpdateActionModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancelar</button>
+            <button onclick="confirmUpdateAction()" style="flex: 1; padding: 12px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Actualizar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Notificaciones y Alertas Profesional (Fase 2) -->
+    <div id="notificationModal" class="modal">
+      <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header" id="notificationHeader" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+          <h3 id="notificationTitle" style="color: white; margin: 0;">📢 Notificaciones</h3>
+          <button class="close-modal" onclick="closeNotificationModal()" style="color: white; opacity: 0.9;">×</button>
+        </div>
+        <div id="notificationBody" style="padding: 20px; max-height: 500px; overflow-y: auto;">
+          <!-- Contenido dinámico -->
+        </div>
+        <div style="padding: 15px; border-top: 1px solid #e5e7eb; display: flex; gap: 10px;">
+          <button onclick="closeNotificationModal()" style="flex: 1; padding: 12px; background: #e5e7eb; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Cerrar</button>
+          <button onclick="markAllNotificationsAsRead()" style="flex: 1; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">✅ Marcar Todo Leído</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Sugerencias Automáticas (Fase 2) -->
+    <div id="suggestionsModal" class="modal">
+      <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white;">
+          <h3 style="color: white; margin: 0;">💡 Sugerencias Inteligentes</h3>
+          <button class="close-modal" onclick="closeSuggestionsModal()" style="color: white; opacity: 0.9;">×</button>
+        </div>
+        <div id="suggestionsBody" style="padding: 20px; max-height: 500px; overflow-y: auto;">
+          <div style="background: #d1fae5; padding: 15px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid #10b981;">
+            <p style="margin: 0; font-size: 13px; color: #065f46;">
+              <strong>🤖 Basado en tu historial:</strong> Analizamos tus ingresos, gastos y progreso en metas para darte recomendaciones personalizadas.
+            </p>
+          </div>
+          <div id="suggestionsList">
+            <!-- Contenido dinámico -->
+          </div>
+        </div>
+        <div style="padding: 15px; border-top: 1px solid #e5e7eb;">
+          <button onclick="closeSuggestionsModal()" style="width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Entendido</button>
         </div>
       </div>
     </div>

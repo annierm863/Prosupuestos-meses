@@ -2785,6 +2785,7 @@ window.selectGoalType = async function (type) {
   document.getElementById('goalFormDebt').style.display = 'none';
   document.getElementById('goalFormSavings').style.display = 'none';
   document.getElementById('goalFormCompound').style.display = 'none';
+  document.getElementById('goalFormProject').style.display = 'none';
   
   const titleEl = document.getElementById('goalFormTitle');
   
@@ -2799,6 +2800,12 @@ window.selectGoalType = async function (type) {
     titleEl.textContent = '🎯 Configurar Meta Compuesta';
     document.getElementById('goalFormCompound').style.display = 'block';
     await populateCompoundDebtInfo();
+  } else if (type === 'project') {
+    titleEl.textContent = '🚀 Configurar Meta Proyecto';
+    document.getElementById('goalFormProject').style.display = 'block';
+    // Establecer fecha mínima como hoy
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('goalProjectDeadline').min = today;
   }
   
   // Ir al paso 2
@@ -2951,6 +2958,8 @@ window.createGoalFromWizard = async function () {
       goalData = await createSavingsGoalFromWizard();
     } else if (selectedGoalType === 'compound') {
       goalData = await createCompoundGoalFromWizard();
+    } else if (selectedGoalType === 'project') {
+      goalData = await createProjectGoalFromWizard();
     }
     
     if (!goalData) {
@@ -3118,6 +3127,59 @@ async function createCompoundGoalFromWizard() {
 }
 
 /**
+ * Crear meta proyecto desde wizard
+ */
+async function createProjectGoalFromWizard() {
+  const name = document.getElementById('goalProjectName').value.trim();
+  const category = document.getElementById('goalProjectCategory').value;
+  const icon = document.getElementById('goalProjectIcon').value.trim() || '🚀';
+  const target = parseFloat(document.getElementById('goalProjectTarget').value);
+  const deadline = document.getElementById('goalProjectDeadline').value;
+  const priority = document.getElementById('goalProjectPriority').value;
+  const description = document.getElementById('goalProjectDescription').value.trim();
+  
+  if (!name) {
+    showMessage("Por favor ingresa un nombre para el proyecto", "error");
+    return null;
+  }
+  
+  if (!target || target <= 0) {
+    showMessage("Por favor ingresa un monto objetivo válido", "error");
+    return null;
+  }
+  
+  if (!deadline) {
+    showMessage("Por favor selecciona una fecha objetivo", "error");
+    return null;
+  }
+  
+  if (new Date(deadline) < new Date()) {
+    showMessage("La fecha objetivo debe ser en el futuro", "error");
+    return null;
+  }
+  
+  return {
+    userId: currentUser.uid,
+    type: "project",
+    name: name,
+    description: description || '',
+    target: target,
+    current: 0,
+    deadline: deadline,
+    category: category,
+    projectConfig: {
+      icon: icon,
+      priority: priority,
+      milestones: [] // Se pueden agregar después
+    },
+    actionPlanIds: [], // Las acciones se agregan después de crear la meta
+    isActive: true,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  };
+}
+
+/**
  * Resetear el wizard de metas
  */
 function resetGoalWizard() {
@@ -3141,6 +3203,15 @@ function resetGoalWizard() {
   document.getElementById('goalCompoundSavings').value = '';
   document.getElementById('goalCompoundDeadline').value = '';
   document.getElementById('compoundSummary').style.display = 'none';
+  
+  // Limpiar formulario proyecto
+  document.getElementById('goalProjectName').value = '';
+  document.getElementById('goalProjectCategory').value = 'real_estate';
+  document.getElementById('goalProjectIcon').value = '';
+  document.getElementById('goalProjectTarget').value = '';
+  document.getElementById('goalProjectDeadline').value = '';
+  document.getElementById('goalProjectPriority').value = 'medium';
+  document.getElementById('goalProjectDescription').value = '';
 }
 
 // Función legacy para compatibilidad - redirige al wizard
@@ -3154,6 +3225,7 @@ async function loadGoals() {
   const cached = cache.get("goals");
   if (cached) {
     await displayGoals(cached);
+    await displayActionPlanHealthDashboard(); // Fase 2
     return cached; // Retornar el array en caché
   }
 
@@ -3171,6 +3243,7 @@ async function loadGoals() {
 
     cache.set("goals", goals);
     await displayGoals(goals);
+    await displayActionPlanHealthDashboard(); // Fase 2
     return goals; // Retornar el array
   } catch (error) {
     showMessage("Error al cargar metas: " + error.message, "error");
@@ -3318,6 +3391,59 @@ async function displayGoals(goals) {
           </div>
         `;
         primaryCTA = `<button class="btn-small" style="background: #3b82f6; color: white; width: 100%;" onclick="showGoalDetails('${goal.id}')">📋 Ver Plan Completo</button>`;
+      } else if (goal.type === "project") {
+        // Para metas proyecto, mostrar plan de acción
+        const icon = goal.projectConfig?.icon || '🚀';
+        const priority = goal.projectConfig?.priority || 'medium';
+        const priorityColors = {
+          low: { bg: '#d1fae5', text: '#065f46', emoji: '🟢' },
+          medium: { bg: '#fef3c7', text: '#92400e', emoji: '🟡' },
+          high: { bg: '#fed7aa', text: '#9a3412', emoji: '🟠' },
+          critical: { bg: '#fee2e2', text: '#991b1b', emoji: '🔴' }
+        };
+        const priorityStyle = priorityColors[priority] || priorityColors.medium;
+        
+        // Mostrar lista de acciones si existen
+        const actionPlanIds = goal.actionPlanIds || [];
+        let actionsHTML = '';
+        
+        if (actionPlanIds.length > 0) {
+          // Aquí se cargarían las acciones, pero para el render inicial lo hacemos async
+          // Por ahora mostramos un placeholder que se llenará con las acciones reales
+          actionsHTML = `
+            <div style="background: #f0f9ff; padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 2px solid #bae6fd;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="font-size: 12px; font-weight: 600; color: #0369a1;">📋 Plan de Acción (${actionPlanIds.length} acciones)</div>
+                <button onclick="openActionModal('${goal.id}')" style="background: #3b82f6; color: white; border: none; padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                  ➕ Agregar
+                </button>
+              </div>
+              <div id="actions-${goal.id}" style="display: flex; flex-direction: column; gap: 6px;">
+                <p style="margin: 0; font-size: 11px; color: #666;">Cargando acciones...</p>
+              </div>
+            </div>
+          `;
+        } else {
+          actionsHTML = `
+            <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #f59e0b;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #92400e; font-weight: 600;">📋 Plan de Acción</p>
+              <p style="margin: 0 0 10px 0; font-size: 11px; color: #92400e;">Aún no has definido acciones para esta meta.</p>
+              <button onclick="openActionModal('${goal.id}')" style="background: #f59e0b; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; width: 100%;">
+                ➕ Agregar Primera Acción
+              </button>
+            </div>
+          `;
+        }
+        
+        detailedInfo = `
+          <div style="background: ${priorityStyle.bg}; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 14px;">${priorityStyle.emoji}</span>
+            <span style="font-size: 11px; font-weight: 600; color: ${priorityStyle.text};">Prioridad: ${priority.toUpperCase()}</span>
+            <span style="margin-left: auto; font-size: 18px;">${icon}</span>
+          </div>
+          ${actionsHTML}
+        `;
+        primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="showContributionModal('${goal.id}')">💰 Registrar Aporte</button>`;
       } else {
         primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="showContributionModal('${goal.id}')">💰 Registrar Aporte</button>`;
       }
@@ -3327,7 +3453,7 @@ async function displayGoals(goals) {
           <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 12px; align-items: flex-start;">
             <div style="flex: 1;">
               <div class="list-item-title" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
-                <span>${goal.type === "debt" ? "💳" : goal.type === "compound" ? "🎯" : "💰"} ${goal.name}</span>
+                <span>${goal.type === "debt" ? "💳" : goal.type === "compound" ? "🎯" : goal.type === "project" ? (goal.projectConfig?.icon || "🚀") : "💰"} ${escapeHtml(goal.name)}</span>
                 ${statusBadge}
               </div>
               
@@ -3343,7 +3469,243 @@ async function displayGoals(goals) {
                 </div>
               </div>
               
-              <!-- Desglose de meta compuesta si aplica -->
+              <!-- Desglose detallado según tipo -->
+              ${detailedInfo}
+              
+              <!-- Información detallada -->
+              <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div>
+                    <span style="color: #666;">📅 Días restantes:</span>
+                    <strong style="color: #333; margin-left: 4px;">${daysLeft > 0 ? daysLeft : 0}</strong>
+                  </div>
+                  <div>
+                    <span style="color: #666;">📊 Requerido/semana:</span>
+                    <strong style="color: #333; margin-left: 4px;">$${requiredWeekly.toFixed(2)}</strong>
+                  </div>
+                  <div>
+                    <span style="color: #666;">📈 Requerido/mes:</span>
+                    <strong style="color: #333; margin-left: 4px;">$${requiredMonthly.toFixed(2)}</strong>
+                  </div>
+                  <div>
+                    <span style="color: #666;">⚡ Ritmo actual/semana:</span>
+                    <strong style="color: ${ritmoWeekly >= requiredWeekly ? '#10b981' : ritmoWeekly >= requiredWeekly * 0.5 ? '#f59e0b' : '#ef4444'}; margin-left: 4px;">
+                      $${ritmoWeekly.toFixed(2)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Proyección si está disponible -->
+              ${goal.projection && goal.projection.message ? `
+                <div style="background: ${goal.projection.onTime ? '#d1fae5' : '#fee2e2'}; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 11px; color: ${goal.projection.onTime ? '#065f46' : '#991b1b'};">
+                  📊 ${goal.projection.message}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+          
+          <!-- Barra de progreso -->
+          <div style="width: 100%; margin-bottom: 12px;">
+            <div class="progress-bar" style="height: 12px; border-radius: 6px; overflow: hidden; background: #e5e7eb;">
+              <div class="progress-fill" style="width: ${Math.min(progress, 100)}%; background: ${statusColor}; height: 100%; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+          
+          <!-- Botones de acción -->
+          <div style="display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; width: 100%;">
+            ${primaryCTA}
+            <button class="btn-small" style="background: #6366f1; color: white;" onclick="showGoalDetails('${goal.id}')" title="Ver detalles">👁️</button>
+            <button class="btn-small" style="background: #3b82f6; color: white;" onclick="editGoal('${goal.id}')" title="Editar">✏️</button>
+            <button class="btn-small btn-danger" onclick="deleteGoal('${goal.id}')" title="Eliminar">🗑️</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+  
+  // Cargar acciones para metas proyecto de forma asíncrona
+  goalsWithRitmo.filter(g => g.type === "project" && g.actionPlanIds?.length > 0).forEach(async (goal) => {
+    const actionsContainer = document.getElementById(`actions-${goal.id}`);
+    if (actionsContainer) {
+      try {
+        const actions = await getGoalActions(goal.id);
+        if (actions.length > 0) {
+          actionsContainer.innerHTML = actions.slice(0, 3).map(action => {
+            const statusIcons = {
+              pending: '⏳',
+              in_progress: '🔄',
+              completed: '✅',
+              blocked: '🚫'
+            };
+            const statusColors = {
+              pending: '#94a3b8',
+              in_progress: '#3b82f6',
+              completed: '#10b981',
+              blocked: '#ef4444'
+            };
+            const statusIcon = statusIcons[action.status] || '⏳';
+            const statusColor = statusColors[action.status] || '#94a3b8';
+            
+            return `
+              <div style="background: white; padding: 8px; border-radius: 6px; border-left: 3px solid ${statusColor}; display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                  <div style="font-size: 11px; font-weight: 600; color: #333;">${statusIcon} ${escapeHtml(action.title)}</div>
+                  ${action.hasMetric && action.metric ? `
+                    <div style="font-size: 10px; color: #666; margin-top: 2px;">
+                      ${action.metric.current || 0} / ${action.metric.target} • ${action.progress.toFixed(0)}%
+                    </div>
+                  ` : ''}
+                </div>
+                ${action.hasMetric && action.status !== 'completed' ? `
+                  <button onclick="openUpdateActionModal('${action.id}')" style="background: #10b981; color: white; border: none; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 600;">
+                    📈
+                  </button>
+                ` : ''}
+              </div>
+            `;
+          }).join('');
+          
+          if (actions.length > 3) {
+            actionsContainer.innerHTML += `
+              <p style="margin: 5px 0 0 0; font-size: 10px; color: #666; text-align: center;">
+                +${actions.length - 3} acciones más
+              </p>
+            `;
+          }
+        }
+      } catch (error) {
+        console.error(`Error cargando acciones para meta ${goal.id}:`, error);
+        actionsContainer.innerHTML = '<p style="margin: 0; font-size: 10px; color: #ef4444;">Error cargando acciones</p>';
+      }
+    }
+  });
+}
+      
+      // CTA según tipo de meta
+      let primaryCTA = "";
+      let detailedInfo = "";
+      
+      if (goal.status === "COMPLETADA") {
+        primaryCTA = '<button class="btn-small" style="background: #6366f1; color: white; width: 100%;" disabled>✅ Completada</button>';
+      } else if (goal.type === "debt" && goal.linkedDebtId) {
+        primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="registerPayment('${goal.linkedDebtId}')">💰 Registrar Pago</button>`;
+      } else if (goal.type === "compound") {
+        // Para metas compuestas, mostrar desglose de deuda + ahorro
+        const savingsTarget = goal.savingsTarget || 0;
+        const debtTarget = goal.target - savingsTarget;
+        const currentDebtPaid = goal.currentDebtPaid || 0;
+        const currentSavings = goal.currentSavings || 0;
+        const debtProgress = debtTarget > 0 ? ((currentDebtPaid / debtTarget) * 100).toFixed(1) : 0;
+        const savingsProgress = savingsTarget > 0 ? ((currentSavings / savingsTarget) * 100).toFixed(1) : 0;
+        
+        detailedInfo = `
+          <div style="background: #f0f9ff; padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 2px solid #bae6fd;">
+            <div style="font-size: 12px; font-weight: 600; color: #0369a1; margin-bottom: 8px;">📊 Desglose Meta Compuesta</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="background: white; padding: 10px; border-radius: 6px; border-left: 3px solid #ef4444;">
+                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">💳 Pago de Deudas</div>
+                <div style="font-size: 14px; font-weight: bold; color: #ef4444; margin-bottom: 4px;">
+                  $${currentDebtPaid.toFixed(2)} / $${debtTarget.toFixed(2)}
+                </div>
+                <div style="font-size: 11px; color: #666;">${debtProgress}% completado</div>
+                <div style="width: 100%; height: 6px; background: #fee2e2; border-radius: 3px; margin-top: 6px; overflow: hidden;">
+                  <div style="width: ${Math.min(debtProgress, 100)}%; height: 100%; background: #ef4444; transition: width 0.3s;"></div>
+                </div>
+              </div>
+              <div style="background: white; padding: 10px; border-radius: 6px; border-left: 3px solid #10b981;">
+                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">💰 Ahorro</div>
+                <div style="font-size: 14px; font-weight: bold; color: #10b981; margin-bottom: 4px;">
+                  $${currentSavings.toFixed(2)} / $${savingsTarget.toFixed(2)}
+                </div>
+                <div style="font-size: 11px; color: #666;">${savingsProgress}% completado</div>
+                <div style="width: 100%; height: 6px; background: #d1fae5; border-radius: 3px; margin-top: 6px; overflow: hidden;">
+                  <div style="width: ${Math.min(savingsProgress, 100)}%; height: 100%; background: #10b981; transition: width 0.3s;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        primaryCTA = `<button class="btn-small" style="background: #3b82f6; color: white; width: 100%;" onclick="showGoalDetails('${goal.id}')">📋 Ver Plan Completo</button>`;
+      } else if (goal.type === "project") {
+        // Para metas proyecto, mostrar plan de acción
+        const icon = goal.projectConfig?.icon || '🚀';
+        const priority = goal.projectConfig?.priority || 'medium';
+        const priorityColors = {
+          low: { bg: '#d1fae5', text: '#065f46', emoji: '🟢' },
+          medium: { bg: '#fef3c7', text: '#92400e', emoji: '🟡' },
+          high: { bg: '#fed7aa', text: '#9a3412', emoji: '🟠' },
+          critical: { bg: '#fee2e2', text: '#991b1b', emoji: '🔴' }
+        };
+        const priorityStyle = priorityColors[priority] || priorityColors.medium;
+        
+        // Mostrar lista de acciones si existen
+        const actionPlanIds = goal.actionPlanIds || [];
+        let actionsHTML = '';
+        
+        if (actionPlanIds.length > 0) {
+          // Aquí se cargarían las acciones, pero para el render inicial lo hacemos async
+          // Por ahora mostramos un placeholder que se llenará con las acciones reales
+          actionsHTML = `
+            <div style="background: #f0f9ff; padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 2px solid #bae6fd;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="font-size: 12px; font-weight: 600; color: #0369a1;">📋 Plan de Acción (${actionPlanIds.length} acciones)</div>
+                <button onclick="openActionModal('${goal.id}')" style="background: #3b82f6; color: white; border: none; padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                  ➕ Agregar
+                </button>
+              </div>
+              <div id="actions-${goal.id}" style="display: flex; flex-direction: column; gap: 6px;">
+                <p style="margin: 0; font-size: 11px; color: #666;">Cargando acciones...</p>
+              </div>
+            </div>
+          `;
+        } else {
+          actionsHTML = `
+            <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #f59e0b;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #92400e; font-weight: 600;">📋 Plan de Acción</p>
+              <p style="margin: 0 0 10px 0; font-size: 11px; color: #92400e;">Aún no has definido acciones para esta meta.</p>
+              <button onclick="openActionModal('${goal.id}')" style="background: #f59e0b; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; width: 100%;">
+                ➕ Agregar Primera Acción
+              </button>
+            </div>
+          `;
+        }
+        
+        detailedInfo = `
+          <div style="background: ${priorityStyle.bg}; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 14px;">${priorityStyle.emoji}</span>
+            <span style="font-size: 11px; font-weight: 600; color: ${priorityStyle.text};">Prioridad: ${priority.toUpperCase()}</span>
+            <span style="margin-left: auto; font-size: 18px;">${icon}</span>
+          </div>
+          ${actionsHTML}
+        `;
+        primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="showContributionModal('${goal.id}')">💰 Registrar Aporte</button>`;
+      } else {
+        primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="showContributionModal('${goal.id}')">💰 Registrar Aporte</button>`;
+      }
+
+      return `
+        <div class="list-item" style="--item-color: ${statusColor}; flex-direction: column; align-items: flex-start; border-left: 4px solid ${statusColor}; padding: 15px; margin-bottom: 15px;">
+          <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 12px; align-items: flex-start;">
+            <div style="flex: 1;">
+              <div class="list-item-title" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                <span>${goal.type === "debt" ? "💳" : goal.type === "compound" ? "🎯" : goal.type === "project" ? (goal.projectConfig?.icon || "🚀") : "💰"} ${escapeHtml(goal.name)}</span>
+                ${statusBadge}
+              </div>
+              
+              <!-- Información principal -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div style="background: #f8f9fa; padding: 10px; border-radius: 8px;">
+                  <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Progreso</div>
+                  <div style="font-size: 18px; font-weight: bold; color: ${statusColor};">${progress}%</div>
+                </div>
+                <div style="background: #f8f9fa; padding: 10px; border-radius: 8px;">
+                  <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Falta</div>
+                  <div style="font-size: 18px; font-weight: bold; color: #333;">$${remaining.toFixed(2)}</div>
+                </div>
+              </div>
+              
+              <!-- Desglose detallado según tipo -->
               ${detailedInfo}
               
               <!-- Información detallada -->
@@ -4017,6 +4379,1019 @@ async function recordGoalTransaction(goalId, type, amount, date, notes = "", deb
   } catch (error) {
     console.error("Error registrando transacción de meta:", error);
     throw error;
+  }
+}
+
+// ============= SISTEMA DE ACCIONES DEL PLAN (GOAL ACTIONS) =============
+// Funciones para crear y gestionar acciones de metas proyecto
+
+/**
+ * Crea una nueva acción para una meta proyecto
+ */
+async function createGoalAction(goalId, actionData) {
+  if (!currentUser || !goalId) return null;
+  
+  try {
+    const action = {
+      userId: currentUser.uid,
+      goalId: goalId,
+      type: actionData.type || "custom",
+      title: actionData.title.trim(),
+      description: actionData.description?.trim() || "",
+      hasMetric: actionData.hasMetric || false,
+      metric: actionData.metric || null,
+      strategy: actionData.strategy?.trim() || "",
+      status: "pending",
+      progress: 0,
+      startDate: actionData.startDate || new Date().toISOString().split('T')[0],
+      targetDate: actionData.targetDate || null,
+      completedDate: null,
+      lastUpdateDate: null,
+      updates: [],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    };
+    
+    const docRef = await addDoc(collection(db, "goalActions"), action);
+    
+    // Agregar el ID de la acción a la meta
+    const goalRef = doc(db, "goals", goalId);
+    await updateDoc(goalRef, {
+      actionPlanIds: arrayUnion(docRef.id),
+      updatedAt: Timestamp.now()
+    });
+    
+    cache.clear("goalActions", goalId);
+    cache.clear("goals");
+    
+    return { id: docRef.id, ...action };
+  } catch (error) {
+    console.error("Error creando acción:", error);
+    throw error;
+  }
+}
+
+/**
+ * Obtiene todas las acciones de una meta
+ */
+async function getGoalActions(goalId) {
+  if (!currentUser || !goalId) return [];
+  
+  try {
+    const cached = cache.get("goalActions", goalId);
+    if (cached) return cached;
+    
+    const q = query(
+      collection(db, "goalActions"),
+      where("goalId", "==", goalId),
+      where("userId", "==", currentUser.uid),
+      orderBy("createdAt", "asc")
+    );
+    
+    const snapshot = await getDocs(q);
+    const actions = [];
+    
+    snapshot.forEach((doc) => {
+      actions.push({ id: doc.id, ...doc.data() });
+    });
+    
+    cache.set("goalActions", actions, goalId);
+    return actions;
+  } catch (error) {
+    console.error("Error obteniendo acciones:", error);
+    return [];
+  }
+}
+
+/**
+ * Actualiza el progreso de una acción
+ */
+async function updateActionProgress(actionId, newValue, note = "") {
+  if (!currentUser || !actionId) return null;
+  
+  try {
+    const actionDoc = await getDoc(doc(db, "goalActions", actionId));
+    if (!actionDoc.exists()) {
+      throw new Error("Acción no encontrada");
+    }
+    
+    const action = actionDoc.data();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Calcular progreso porcentual
+    let progress = 0;
+    if (action.hasMetric && action.metric && action.metric.target) {
+      progress = Math.min((newValue / action.metric.target) * 100, 100);
+    }
+    
+    // Determinar nuevo status
+    let newStatus = action.status;
+    if (progress >= 100) {
+      newStatus = "completed";
+    } else if (progress > 0) {
+      newStatus = "in_progress";
+    }
+    
+    // Actualizar acción
+    const updateData = {
+      progress: progress,
+      status: newStatus,
+      lastUpdateDate: today,
+      updates: arrayUnion({
+        date: today,
+        value: newValue,
+        previousValue: action.metric?.current || 0,
+        note: note.trim()
+      }),
+      updatedAt: Timestamp.now()
+    };
+    
+    if (action.hasMetric) {
+      updateData["metric.current"] = newValue;
+    }
+    
+    if (newStatus === "completed" && !action.completedDate) {
+      updateData.completedDate = today;
+    }
+    
+    await updateDoc(doc(db, "goalActions", actionId), updateData);
+    
+    // Limpiar caché
+    cache.clear("goalActions", action.goalId);
+    
+    return { id: actionId, ...action, ...updateData };
+  } catch (error) {
+    console.error("Error actualizando progreso de acción:", error);
+    throw error;
+  }
+}
+
+/**
+ * Actualiza una acción completa
+ */
+async function updateGoalAction(actionId, updates) {
+  if (!currentUser || !actionId) return null;
+  
+  try {
+    const actionDoc = await getDoc(doc(db, "goalActions", actionId));
+    if (!actionDoc.exists()) {
+      throw new Error("Acción no encontrada");
+    }
+    
+    const action = actionDoc.data();
+    
+    await updateDoc(doc(db, "goalActions", actionId), {
+      ...updates,
+      updatedAt: Timestamp.now()
+    });
+    
+    cache.clear("goalActions", action.goalId);
+    
+    return { id: actionId, ...action, ...updates };
+  } catch (error) {
+    console.error("Error actualizando acción:", error);
+    throw error;
+  }
+}
+
+/**
+ * Elimina una acción
+ */
+async function deleteGoalAction(actionId) {
+  if (!currentUser || !actionId) return false;
+  
+  try {
+    const actionDoc = await getDoc(doc(db, "goalActions", actionId));
+    if (!actionDoc.exists()) {
+      throw new Error("Acción no encontrada");
+    }
+    
+    const action = actionDoc.data();
+    
+    // Eliminar referencia de la meta
+    const goalRef = doc(db, "goals", action.goalId);
+    await updateDoc(goalRef, {
+      actionPlanIds: arrayRemove(actionId),
+      updatedAt: Timestamp.now()
+    });
+    
+    // Eliminar acción
+    await deleteDoc(doc(db, "goalActions", actionId));
+    
+    cache.clear("goalActions", action.goalId);
+    cache.clear("goals");
+    
+    return true;
+  } catch (error) {
+    console.error("Error eliminando acción:", error);
+    throw error;
+  }
+}
+
+/**
+ * Calcula la salud del plan de acción de una meta
+ */
+async function calculateActionPlanHealth(goalId) {
+  const actions = await getGoalActions(goalId);
+  
+  if (actions.length === 0) {
+    return {
+      total: 0,
+      completed: 0,
+      inProgress: 0,
+      pending: 0,
+      blocked: 0,
+      avgProgress: 0,
+      health: 'none'
+    };
+  }
+  
+  const total = actions.length;
+  const completed = actions.filter(a => a.status === 'completed').length;
+  const inProgress = actions.filter(a => a.status === 'in_progress').length;
+  const pending = actions.filter(a => a.status === 'pending').length;
+  const blocked = actions.filter(a => a.status === 'blocked').length;
+  
+  const avgProgress = actions.reduce((sum, a) => sum + (a.progress || 0), 0) / total;
+  
+  let health = 'critical';
+  if (avgProgress >= 70) {
+    health = 'good';
+  } else if (avgProgress >= 40) {
+    health = 'warning';
+  }
+  
+  return {
+    total,
+    completed,
+    inProgress,
+    pending,
+    blocked,
+    avgProgress: avgProgress.toFixed(1),
+    health
+  };
+}
+
+// ============= MODALES Y UI PARA ACCIONES =============
+
+// Variables globales para modales de acciones
+let currentGoalIdForAction = null;
+let currentActionId = null;
+
+/**
+ * Abre el modal para agregar una nueva acción
+ */
+window.openActionModal = function(goalId) {
+  if (!goalId) {
+    showMessage("Error: Goal ID no especificado", "error");
+    return;
+  }
+  
+  currentGoalIdForAction = goalId;
+  currentActionId = null;
+  
+  // Limpiar formulario
+  document.getElementById('actionModalTitle').textContent = '➕ Nueva Acción del Plan';
+  document.getElementById('actionType').value = 'increase_income';
+  document.getElementById('actionTitle').value = '';
+  document.getElementById('actionDescription').value = '';
+  document.getElementById('actionHasMetric').checked = false;
+  document.getElementById('actionMetricSection').style.display = 'none';
+  document.getElementById('actionMetricType').value = 'monthly_amount';
+  document.getElementById('actionMetricTarget').value = '';
+  document.getElementById('actionMetricCurrent').value = '0';
+  document.getElementById('actionStrategy').value = '';
+  
+  // Establecer fechas por defecto
+  const today = new Date().toISOString().split('T')[0];
+  const threeMonthsLater = new Date();
+  threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+  document.getElementById('actionStartDate').value = today;
+  document.getElementById('actionTargetDate').value = threeMonthsLater.toISOString().split('T')[0];
+  
+  // Mostrar modal
+  document.getElementById('actionModal').classList.add('active');
+};
+
+/**
+ * Cierra el modal de acción
+ */
+window.closeActionModal = function() {
+  document.getElementById('actionModal').classList.remove('active');
+  currentGoalIdForAction = null;
+  currentActionId = null;
+};
+
+/**
+ * Toggle para mostrar/ocultar sección de métrica
+ */
+window.toggleActionMetric = function() {
+  const hasMetric = document.getElementById('actionHasMetric').checked;
+  document.getElementById('actionMetricSection').style.display = hasMetric ? 'block' : 'none';
+};
+
+/**
+ * Guarda la acción (crear o actualizar)
+ */
+window.saveAction = async function() {
+  if (!currentGoalIdForAction || !currentUser) return;
+  
+  try {
+    showLoading("Guardando acción...");
+    
+    const title = document.getElementById('actionTitle').value.trim();
+    const description = document.getElementById('actionDescription').value.trim();
+    const type = document.getElementById('actionType').value;
+    const hasMetric = document.getElementById('actionHasMetric').checked;
+    const strategy = document.getElementById('actionStrategy').value.trim();
+    const startDate = document.getElementById('actionStartDate').value;
+    const targetDate = document.getElementById('actionTargetDate').value;
+    
+    // Validaciones
+    if (!title) {
+      showMessage("Por favor ingresa un título para la acción", "error");
+      hideLoading();
+      return;
+    }
+    
+    if (!startDate || !targetDate) {
+      showMessage("Por favor selecciona las fechas de inicio y objetivo", "error");
+      hideLoading();
+      return;
+    }
+    
+    if (new Date(targetDate) < new Date(startDate)) {
+      showMessage("La fecha objetivo debe ser posterior a la fecha de inicio", "error");
+      hideLoading();
+      return;
+    }
+    
+    // Construir datos de la acción
+    const actionData = {
+      type: type,
+      title: title,
+      description: description,
+      hasMetric: hasMetric,
+      strategy: strategy,
+      startDate: startDate,
+      targetDate: targetDate
+    };
+    
+    // Si tiene métrica, agregarla
+    if (hasMetric) {
+      const metricTarget = parseFloat(document.getElementById('actionMetricTarget').value);
+      const metricCurrent = parseFloat(document.getElementById('actionMetricCurrent').value) || 0;
+      const metricType = document.getElementById('actionMetricType').value;
+      
+      if (!metricTarget || metricTarget <= 0) {
+        showMessage("Por favor ingresa un objetivo válido para la métrica", "error");
+        hideLoading();
+        return;
+      }
+      
+      actionData.metric = {
+        type: metricType,
+        target: metricTarget,
+        current: metricCurrent,
+        unit: metricType.includes('amount') ? 'USD' : metricType.includes('percentage') ? 'percentage' : 'units',
+        frequency: metricType === 'monthly_amount' ? 'monthly' : metricType === 'one_time_amount' ? 'one_time' : 'custom'
+      };
+    }
+    
+    // Crear la acción
+    await createGoalAction(currentGoalIdForAction, actionData);
+    
+    closeActionModal();
+    await loadGoals(); // Recargar para mostrar las acciones
+    showMessage("✅ Acción creada exitosamente", "success");
+  } catch (error) {
+    showMessage("Error al guardar acción: " + error.message, "error");
+    console.error("Error en saveAction:", error);
+  } finally {
+    hideLoading();
+  }
+};
+
+/**
+ * Abre el modal para actualizar progreso de una acción
+ */
+window.openUpdateActionModal = async function(actionId) {
+  if (!actionId) return;
+  
+  try {
+    const actionDoc = await getDoc(doc(db, "goalActions", actionId));
+    if (!actionDoc.exists()) {
+      showMessage("Acción no encontrada", "error");
+      return;
+    }
+    
+    const action = actionDoc.data();
+    currentActionId = actionId;
+    
+    // Llenar información
+    document.getElementById('updateActionName').textContent = action.title;
+    document.getElementById('updateActionCurrent').textContent = action.metric?.current || 0;
+    document.getElementById('updateActionTarget').textContent = action.metric?.target || 100;
+    document.getElementById('updateActionValue').value = action.metric?.current || 0;
+    document.getElementById('updateActionNote').value = '';
+    
+    // Mostrar modal
+    document.getElementById('updateActionModal').classList.add('active');
+  } catch (error) {
+    showMessage("Error al cargar acción: " + error.message, "error");
+    console.error("Error en openUpdateActionModal:", error);
+  }
+};
+
+/**
+ * Cierra el modal de actualización
+ */
+window.closeUpdateActionModal = function() {
+  document.getElementById('updateActionModal').classList.remove('active');
+  currentActionId = null;
+};
+
+/**
+ * Confirma la actualización del progreso
+ */
+window.confirmUpdateAction = async function() {
+  if (!currentActionId || !currentUser) return;
+  
+  try {
+    showLoading("Actualizando progreso...");
+    
+    const newValue = parseFloat(document.getElementById('updateActionValue').value);
+    const note = document.getElementById('updateActionNote').value.trim();
+    
+    if (isNaN(newValue) || newValue < 0) {
+      showMessage("Por favor ingresa un valor válido", "error");
+      hideLoading();
+      return;
+    }
+    
+    await updateActionProgress(currentActionId, newValue, note);
+    
+    closeUpdateActionModal();
+    await loadGoals(); // Recargar para actualizar el UI
+    showMessage("✅ Progreso actualizado", "success");
+  } catch (error) {
+    showMessage("Error al actualizar progreso: " + error.message, "error");
+    console.error("Error en confirmUpdateAction:", error);
+  } finally {
+    hideLoading();
+  }
+};
+
+/**
+ * Elimina una acción con confirmación
+ */
+window.deleteAction = async function(actionId) {
+  if (!actionId) return;
+  
+  showConfirmModal(
+    "¿Estás seguro de eliminar esta acción? Esta acción no se puede deshacer.",
+    "🗑️ Eliminar Acción",
+    async (confirmed) => {
+      if (!confirmed) return;
+      
+      try {
+        showLoading("Eliminando acción...");
+        await deleteGoalAction(actionId);
+        await loadGoals();
+        showMessage("✅ Acción eliminada", "success");
+      } catch (error) {
+        showMessage("Error al eliminar acción: " + error.message, "error");
+        console.error("Error en deleteAction:", error);
+      } finally {
+        hideLoading();
+      }
+    }
+  );
+};
+
+// ============= FASE 2: AUTOMATION Y SUGERENCIAS =============
+
+/**
+ * Genera y muestra el Dashboard de Salud del Plan
+ */
+async function displayActionPlanHealthDashboard() {
+  if (!currentUser) return;
+  
+  try {
+    const goals = await getGoals();
+    const projectGoals = goals.filter(g => g.type === 'project' && g.isActive !== false && !g.isArchived);
+    
+    if (projectGoals.length === 0) {
+      document.getElementById('actionPlanHealthDashboard').style.display = 'none';
+      return;
+    }
+    
+    // Calcular salud para cada meta proyecto
+    const healthData = await Promise.all(
+      projectGoals.map(async (goal) => {
+        const health = await calculateActionPlanHealth(goal.id);
+        return { goal, health };
+      })
+    );
+    
+    // Calcular estadísticas globales
+    const totalActions = healthData.reduce((sum, d) => sum + d.health.total, 0);
+    const totalCompleted = healthData.reduce((sum, d) => sum + d.health.completed, 0);
+    const totalInProgress = healthData.reduce((sum, d) => sum + d.health.inProgress, 0);
+    const totalPending = healthData.reduce((sum, d) => sum + d.health.pending, 0);
+    const totalBlocked = healthData.reduce((sum, d) => sum + d.health.blocked, 0);
+    const avgHealth = totalActions > 0 
+      ? healthData.reduce((sum, d) => sum + parseFloat(d.health.avgProgress), 0) / healthData.length 
+      : 0;
+    
+    // Determinar color de salud general
+    let healthColor = '#ef4444';
+    let healthLabel = 'Crítico';
+    let healthIcon = '🔴';
+    if (avgHealth >= 70) {
+      healthColor = '#10b981';
+      healthLabel = 'Excelente';
+      healthIcon = '🟢';
+    } else if (avgHealth >= 40) {
+      healthColor = '#f59e0b';
+      healthLabel = 'En Progreso';
+      healthIcon = '🟡';
+    }
+    
+    const dashboard = document.getElementById('actionPlanHealthDashboard');
+    dashboard.style.display = 'block';
+    dashboard.innerHTML = `
+      <div style="background: linear-gradient(135deg, ${healthColor} 0%, ${healthColor}dd 100%); padding: 20px; border-radius: 15px; color: white;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="color: white; margin: 0 0 5px 0; font-size: 18px;">${healthIcon} Salud del Plan de Acción</h3>
+            <p style="margin: 0; font-size: 13px; opacity: 0.9;">${projectGoals.length} proyecto(s) activo(s)</p>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 32px; font-weight: bold;">${avgHealth.toFixed(0)}%</div>
+            <div style="font-size: 12px; opacity: 0.9;">${healthLabel}</div>
+          </div>
+        </div>
+        
+        <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 10px; backdrop-filter: blur(10px);">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 15px;">
+            <div style="text-align: center;">
+              <div style="font-size: 24px; font-weight: bold;">${totalActions}</div>
+              <div style="font-size: 11px; opacity: 0.9;">Total Acciones</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 24px; font-weight: bold;">✅ ${totalCompleted}</div>
+              <div style="font-size: 11px; opacity: 0.9;">Completadas</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 24px; font-weight: bold;">🔄 ${totalInProgress}</div>
+              <div style="font-size: 11px; opacity: 0.9;">En Progreso</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 24px; font-weight: bold;">⏳ ${totalPending}</div>
+              <div style="font-size: 11px; opacity: 0.9;">Pendientes</div>
+            </div>
+            ${totalBlocked > 0 ? `
+              <div style="text-align: center;">
+                <div style="font-size: 24px; font-weight: bold;">🚫 ${totalBlocked}</div>
+                <div style="font-size: 11px; opacity: 0.9;">Bloqueadas</div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+          <button onclick="showNotifications()" style="flex: 1; min-width: 150px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">
+            📢 Ver Notificaciones
+          </button>
+          <button onclick="showSuggestions()" style="flex: 1; min-width: 150px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">
+            💡 Ver Sugerencias
+          </button>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error generando dashboard de salud:", error);
+  }
+}
+
+/**
+ * Genera notificaciones inteligentes
+ */
+async function generateNotifications() {
+  if (!currentUser) return [];
+  
+  const notifications = [];
+  
+  try {
+    const goals = await getGoals();
+    const projectGoals = goals.filter(g => g.type === 'project' && g.isActive !== false && !g.isArchived);
+    
+    for (const goal of projectGoals) {
+      const actions = await getGoalActions(goal.id);
+      const today = new Date();
+      
+      for (const action of actions) {
+        // Notificación: Acción atrasada
+        if (action.targetDate && action.status !== 'completed') {
+          const targetDate = new Date(action.targetDate);
+          const daysUntilTarget = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+          
+          if (daysUntilTarget < 0) {
+            notifications.push({
+              type: 'overdue',
+              priority: 'high',
+              icon: '🚨',
+              title: 'Acción Atrasada',
+              message: `"${action.title}" de "${goal.name}" venció hace ${Math.abs(daysUntilTarget)} días`,
+              goalId: goal.id,
+              actionId: action.id,
+              color: '#ef4444'
+            });
+          } else if (daysUntilTarget <= 7 && action.status === 'pending') {
+            notifications.push({
+              type: 'upcoming',
+              priority: 'medium',
+              icon: '⚠️',
+              title: 'Acción Próxima a Vencer',
+              message: `"${action.title}" de "${goal.name}" vence en ${daysUntilTarget} días`,
+              goalId: goal.id,
+              actionId: action.id,
+              color: '#f59e0b'
+            });
+          }
+        }
+        
+        // Notificación: Acción sin progreso por 14+ días
+        if (action.hasMetric && action.lastUpdateDate && action.status === 'in_progress') {
+          const lastUpdate = new Date(action.lastUpdateDate);
+          const daysSinceUpdate = Math.ceil((today - lastUpdate) / (1000 * 60 * 60 * 24));
+          
+          if (daysSinceUpdate >= 14) {
+            notifications.push({
+              type: 'stale',
+              priority: 'medium',
+              icon: '⏱️',
+              title: 'Sin Actualización',
+              message: `"${action.title}" no se ha actualizado en ${daysSinceUpdate} días`,
+              goalId: goal.id,
+              actionId: action.id,
+              color: '#8b5cf6'
+            });
+          }
+        }
+        
+        // Notificación: Acción completada recientemente
+        if (action.status === 'completed' && action.completedDate) {
+          const completedDate = new Date(action.completedDate);
+          const daysSinceCompletion = Math.ceil((today - completedDate) / (1000 * 60 * 60 * 24));
+          
+          if (daysSinceCompletion <= 3) {
+            notifications.push({
+              type: 'success',
+              priority: 'low',
+              icon: '🎉',
+              title: '¡Acción Completada!',
+              message: `Completaste "${action.title}" de "${goal.name}"`,
+              goalId: goal.id,
+              actionId: action.id,
+              color: '#10b981'
+            });
+          }
+        }
+      }
+      
+      // Notificación: Meta proyecto sin acciones
+      if (actions.length === 0) {
+        notifications.push({
+          type: 'warning',
+          priority: 'medium',
+          icon: '📋',
+          title: 'Meta sin Plan de Acción',
+          message: `"${goal.name}" no tiene acciones definidas`,
+          goalId: goal.id,
+          color: '#f59e0b'
+        });
+      }
+    }
+    
+    // Ordenar por prioridad
+    const priorityOrder = { high: 1, medium: 2, low: 3 };
+    notifications.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+    
+  } catch (error) {
+    console.error("Error generando notificaciones:", error);
+  }
+  
+  return notifications;
+}
+
+/**
+ * Muestra modal de notificaciones
+ */
+window.showNotifications = async function() {
+  try {
+    showLoading("Cargando notificaciones...");
+    const notifications = await generateNotifications();
+    
+    const notificationBody = document.getElementById('notificationBody');
+    
+    if (notifications.length === 0) {
+      notificationBody.innerHTML = `
+        <div style="text-align: center; padding: 40px 20px;">
+          <div style="font-size: 64px; margin-bottom: 15px;">✅</div>
+          <h3 style="color: #10b981; margin: 0 0 10px 0;">¡Todo en Orden!</h3>
+          <p style="color: #666; margin: 0; font-size: 14px;">No tienes notificaciones pendientes. Sigue así 💪</p>
+        </div>
+      `;
+    } else {
+      notificationBody.innerHTML = notifications.map(notif => `
+        <div style="background: ${notif.color}10; border-left: 4px solid ${notif.color}; padding: 15px; border-radius: 8px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: start; gap: 12px;">
+            <div style="font-size: 24px;">${notif.icon}</div>
+            <div style="flex: 1;">
+              <h4 style="margin: 0 0 5px 0; color: #333; font-size: 14px;">${notif.title}</h4>
+              <p style="margin: 0 0 10px 0; color: #666; font-size: 13px;">${notif.message}</p>
+              ${notif.actionId ? `
+                <button onclick="openUpdateActionModal('${notif.actionId}')" style="background: ${notif.color}; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                  Actualizar Ahora
+                </button>
+              ` : notif.goalId ? `
+                <button onclick="openActionModal('${notif.goalId}')" style="background: ${notif.color}; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                  Agregar Acción
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+    
+    document.getElementById('notificationModal').classList.add('active');
+  } catch (error) {
+    showMessage("Error al cargar notificaciones: " + error.message, "error");
+    console.error("Error en showNotifications:", error);
+  } finally {
+    hideLoading();
+  }
+};
+
+/**
+ * Cierra modal de notificaciones
+ */
+window.closeNotificationModal = function() {
+  document.getElementById('notificationModal').classList.remove('active');
+};
+
+/**
+ * Marca todas las notificaciones como leídas
+ */
+window.markAllNotificationsAsRead = function() {
+  closeNotificationModal();
+  showMessage("✅ Notificaciones marcadas como leídas", "success");
+};
+
+/**
+ * Genera sugerencias inteligentes basadas en historial
+ */
+async function generateSmartSuggestions() {
+  if (!currentUser) return [];
+  
+  const suggestions = [];
+  
+  try {
+    const goals = await getGoals();
+    const projectGoals = goals.filter(g => g.type === 'project' && g.isActive !== false && !g.isArchived);
+    
+    // Analizar semanas recientes para patrones
+    const weeks = await loadWeeks();
+    const recentWeeks = weeks.slice(0, 4); // Últimas 4 semanas
+    
+    if (recentWeeks.length > 0) {
+      // Calcular promedio de ingresos y gastos
+      let totalIncome = 0;
+      let totalExpenses = 0;
+      
+      for (const week of recentWeeks) {
+        const incomes = await getIncomesForWeek(week.id);
+        const expenses = await getExpensesForWeek(week.id);
+        totalIncome += incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
+        totalExpenses += expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+      }
+      
+      const avgIncome = totalIncome / recentWeeks.length;
+      const avgExpenses = totalExpenses / recentWeeks.length;
+      const avgSurplus = avgIncome - avgExpenses;
+      
+      // Sugerencia 1: Basada en excedente
+      if (avgSurplus > 0) {
+        const monthlyPotential = avgSurplus * 4.33;
+        suggestions.push({
+          type: 'opportunity',
+          icon: '💰',
+          title: 'Oportunidad de Ahorro',
+          message: `Con tu excedente semanal promedio de $${avgSurplus.toFixed(2)}, podrías ahorrar $${monthlyPotential.toFixed(2)} al mes`,
+          action: 'Considera crear una meta de ahorro automática',
+          priority: 'high',
+          color: '#10b981'
+        });
+      } else if (avgSurplus < 0) {
+        suggestions.push({
+          type: 'warning',
+          icon: '⚠️',
+          title: 'Gastos Superan Ingresos',
+          message: `Tus gastos semanales promedio superan tus ingresos en $${Math.abs(avgSurplus).toFixed(2)}`,
+          action: 'Revisa tus gastos y considera acciones de "Reducir Gastos"',
+          priority: 'high',
+          color: '#ef4444'
+        });
+      }
+    }
+    
+    // Analizar metas proyecto
+    for (const goal of projectGoals) {
+      const actions = await getGoalActions(goal.id);
+      const health = await calculateActionPlanHealth(goal.id);
+      
+      // Sugerencia 2: Meta con pocas acciones
+      if (actions.length < 3) {
+        suggestions.push({
+          type: 'tip',
+          icon: '💡',
+          title: `Fortalece "${goal.name}"`,
+          message: `Esta meta solo tiene ${actions.length} acción(es). Considera agregar más acciones específicas`,
+          action: 'Agrega acciones como "Aumentar ingresos" o "Reducir gastos"',
+          priority: 'medium',
+          color: '#3b82f6',
+          goalId: goal.id
+        });
+      }
+      
+      // Sugerencia 3: Muchas acciones pendientes
+      if (health.pending > health.inProgress + health.completed && health.total > 0) {
+        suggestions.push({
+          type: 'action',
+          icon: '🚀',
+          title: `Activa el Plan de "${goal.name}"`,
+          message: `Tienes ${health.pending} acciones pendientes. ¡Es hora de activarlas!`,
+          action: 'Actualiza el progreso de al menos una acción esta semana',
+          priority: 'medium',
+          color: '#8b5cf6',
+          goalId: goal.id
+        });
+      }
+      
+      // Sugerencia 4: Progreso estancado
+      if (health.avgProgress < 30 && health.total > 0) {
+        const daysLeft = Math.ceil((new Date(goal.deadline) - new Date()) / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0 && daysLeft < 90) {
+          suggestions.push({
+            type: 'urgency',
+            icon: '⏰',
+            title: `"${goal.name}" Necesita Atención`,
+            message: `Solo tienes ${daysLeft} días y el progreso es del ${health.avgProgress}%`,
+            action: 'Enfócate en las acciones de mayor impacto',
+            priority: 'high',
+            color: '#f59e0b',
+            goalId: goal.id
+          });
+        }
+      }
+      
+      // Sugerencia 5: Buen progreso - motivación
+      if (health.avgProgress >= 70 && health.avgProgress < 100) {
+        suggestions.push({
+          type: 'motivation',
+          icon: '🎯',
+          title: `¡Excelente Progreso en "${goal.name}"!`,
+          message: `Vas en ${health.avgProgress}% de avance. ¡Sigue así!`,
+          action: 'Mantén el ritmo para completarla pronto',
+          priority: 'low',
+          color: '#10b981',
+          goalId: goal.id
+        });
+      }
+    }
+    
+    // Sugerencia 6: Sin metas proyecto
+    if (projectGoals.length === 0) {
+      suggestions.push({
+        type: 'new_feature',
+        icon: '🚀',
+        title: 'Crea tu Primera Meta Proyecto',
+        message: 'Las metas proyecto te ayudan a alcanzar grandes objetivos con planes de acción estructurados',
+        action: 'Crea una meta para comprar un terreno, casa, o iniciar un negocio',
+        priority: 'medium',
+        color: '#6366f1'
+      });
+    }
+    
+    // Ordenar por prioridad
+    const priorityOrder = { high: 1, medium: 2, low: 3 };
+    suggestions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+    
+  } catch (error) {
+    console.error("Error generando sugerencias:", error);
+  }
+  
+  return suggestions.slice(0, 8); // Máximo 8 sugerencias
+}
+
+/**
+ * Muestra modal de sugerencias
+ */
+window.showSuggestions = async function() {
+  try {
+    showLoading("Analizando datos...");
+    const suggestions = await generateSmartSuggestions();
+    
+    const suggestionsList = document.getElementById('suggestionsList');
+    
+    if (suggestions.length === 0) {
+      suggestionsList.innerHTML = `
+        <div style="text-align: center; padding: 40px 20px;">
+          <div style="font-size: 64px; margin-bottom: 15px;">🎯</div>
+          <h3 style="color: #10b981; margin: 0 0 10px 0;">Todo Perfecto</h3>
+          <p style="color: #666; margin: 0; font-size: 14px;">No tenemos sugerencias adicionales por ahora. ¡Vas muy bien!</p>
+        </div>
+      `;
+    } else {
+      suggestionsList.innerHTML = suggestions.map((sug, index) => `
+        <div style="background: white; border: 2px solid ${sug.color}30; border-radius: 12px; padding: 18px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+          <div style="display: flex; align-items: start; gap: 15px;">
+            <div style="background: ${sug.color}15; width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+              ${sug.icon}
+            </div>
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <h4 style="margin: 0; color: #333; font-size: 15px;">${sug.title}</h4>
+                <span style="background: ${sug.color}20; color: ${sug.color}; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; text-transform: uppercase;">
+                  ${sug.priority === 'high' ? '🔥 Alta' : sug.priority === 'medium' ? '📌 Media' : '💡 Info'}
+                </span>
+              </div>
+              <p style="margin: 0 0 10px 0; color: #666; font-size: 13px; line-height: 1.5;">${sug.message}</p>
+              <div style="background: ${sug.color}10; padding: 10px; border-radius: 8px; border-left: 3px solid ${sug.color};">
+                <p style="margin: 0; color: ${sug.color}; font-size: 12px; font-weight: 600;">💡 ${sug.action}</p>
+              </div>
+              ${sug.goalId ? `
+                <div style="margin-top: 10px;">
+                  <button onclick="closeSuggestionsModal(); openActionModal('${sug.goalId}')" style="background: ${sug.color}; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                    Tomar Acción
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+    
+    document.getElementById('suggestionsModal').classList.add('active');
+  } catch (error) {
+    showMessage("Error al generar sugerencias: " + error.message, "error");
+    console.error("Error en showSuggestions:", error);
+  } finally {
+    hideLoading();
+  }
+};
+
+/**
+ * Cierra modal de sugerencias
+ */
+window.closeSuggestionsModal = function() {
+  document.getElementById('suggestionsModal').classList.remove('active');
+};
+
+// Funciones auxiliares para obtener datos de semanas
+async function getIncomesForWeek(weekId) {
+  if (!currentUser || !weekId) return [];
+  try {
+    const q = query(
+      collection(db, "incomes"),
+      where("weekId", "==", weekId),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error("Error obteniendo ingresos:", error);
+    return [];
+  }
+}
+
+async function getExpensesForWeek(weekId) {
+  if (!currentUser || !weekId) return [];
+  try {
+    const q = query(
+      collection(db, "expenses"),
+      where("weekId", "==", weekId),
+      where("userId", "==", currentUser.uid)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error("Error obteniendo gastos:", error);
+    return [];
   }
 }
 
