@@ -3669,16 +3669,56 @@ window.confirmEditGoal = async function () {
   try {
     showLoading("Actualizando meta...");
     
-    await updateDoc(doc(db, "goals", currentEditingGoalId), {
+    // Obtener la meta actual antes de actualizar
+    const goalDoc = await getDoc(doc(db, "goals", currentEditingGoalId));
+    const currentGoal = goalDoc.data();
+    
+    const updateData = {
       name: name,
       target: target,
       current: current,
       deadline: deadline,
       updatedAt: Timestamp.now()
-    });
+    };
+    
+    // Si es una meta de deuda vinculada, sincronizar con la deuda
+    if (currentGoal.linkedDebtId && currentGoal.type === "debt") {
+      try {
+        const debtDoc = await getDoc(doc(db, "liabilities", currentGoal.linkedDebtId));
+        if (debtDoc.exists()) {
+          const debt = debtDoc.data();
+          
+          // Si cambió el 'current' de la meta, actualizar el monto de la deuda
+          if (current !== currentGoal.current) {
+            // current de la meta = cuánto se ha pagado
+            // amount de la deuda = cuánto falta por pagar
+            // Si target es el monto original de la deuda: newDebtAmount = target - current
+            const newDebtAmount = Math.max(0, target - current);
+            
+            await updateDoc(doc(db, "liabilities", currentGoal.linkedDebtId), {
+              amount: newDebtAmount,
+              updatedAt: Timestamp.now()
+            });
+            
+            cache.clear("liabilities");
+          }
+        }
+      } catch (debtError) {
+        console.warn("Error sincronizando con deuda:", debtError);
+        // Continuar con la actualización de la meta aunque falle la sincronización
+      }
+    }
+    
+    await updateDoc(doc(db, "goals", currentEditingGoalId), updateData);
 
     cache.clear("goals");
     await loadGoals();
+    
+    // Recargar deudas si había sincronización
+    if (currentGoal.linkedDebtId) {
+      await loadDebts();
+    }
+    
     closeEditGoalModal();
     showMessage("✅ Meta actualizada exitosamente", "success");
   } catch (error) {
@@ -3687,6 +3727,58 @@ window.confirmEditGoal = async function () {
   } finally {
     hideLoading();
   }
+};
+
+
+/**
+ * Desvincular una meta de su deuda asociada
+ */
+window.unlinkGoalFromDebt = async function (goalId) {
+  if (!currentUser || !goalId) {
+    showMessage("Parámetros inválidos", "error");
+    return;
+  }
+
+  showConfirmModal(
+    "¿Deseas desvincular esta meta de su deuda? La meta se convertirá en una meta de ahorro independiente.",
+    "🔗 Desvincular Meta",
+    async (confirmed) => {
+      if (!confirmed) return;
+
+      try {
+        showLoading("Desvinculando meta...");
+        
+        const goalDoc = await getDoc(doc(db, "goals", goalId));
+        if (!goalDoc.exists()) {
+          showMessage("Meta no encontrada", "error");
+          return;
+        }
+
+        const goal = goalDoc.data();
+        
+        if (!goal.linkedDebtId) {
+          showMessage("Esta meta no está vinculada a ninguna deuda", "warning");
+          return;
+        }
+
+        // Actualizar la meta para desvincularla
+        await updateDoc(doc(db, "goals", goalId), {
+          linkedDebtId: null,
+          type: "savings", // Convertir a meta de ahorro
+          updatedAt: Timestamp.now()
+        });
+
+        cache.clear("goals");
+        await loadGoals();
+        
+        showMessage("✅ Meta desvinculada exitosamente. Ahora es una meta de ahorro independiente.", "success");
+      } catch (error) {
+        handleError(error, "unlinkGoalFromDebt");
+      } finally {
+        hideLoading();
+      }
+    }
+  );
 };
 
 
@@ -3908,6 +4000,10 @@ window.showGoalDetails = async function (goalId) {
                   <button onclick="closeGoalDetailsModal(); registerPayment('${goal.linkedDebtId}');" 
                           style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
                     💰 Registrar Pago
+                  </button>
+                  <button onclick="closeGoalDetailsModal(); unlinkGoalFromDebt('${goalId}');" 
+                          style="padding: 10px 20px; background: #8b5cf6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                    🔗 Desvincular de Deuda
                   </button>
                 ` : goal.type !== "compound" ? `
                   <button onclick="closeGoalDetailsModal(); showContributionModal('${goalId}');" 
@@ -8293,6 +8389,17 @@ async function displayDebts() {
     showLoading("Cargando deudas...");
     let debts = await loadDebts();
     
+    // Cargar todas las metas para verificar vinculaciones
+    const allGoals = await getGoals();
+    const linkedGoalsMap = {};
+    if (Array.isArray(allGoals)) {
+      allGoals.forEach(goal => {
+        if (goal.linkedDebtId && goal.isActive !== false && !goal.isArchived) {
+          linkedGoalsMap[goal.linkedDebtId] = goal;
+        }
+      });
+    }
+    
     // Aplicar filtro por propietario
     const ownerFilter = document.getElementById("debtOwnerFilter")?.value || "all";
     if (ownerFilter !== "all") {
@@ -8543,8 +8650,29 @@ async function displayDebts() {
                                  debt.zeroInterestExpiry !== null && 
                                  debt.zeroInterestExpiry !== undefined;
           
+          // Verificar si esta deuda tiene una meta vinculada
+          const linkedGoal = linkedGoalsMap[debt.id];
+          const hasLinkedGoal = !!linkedGoal;
+          const goalProgress = linkedGoal ? ((linkedGoal.current / linkedGoal.target) * 100).toFixed(1) : 0;
+          
           return `
-      <div class="card" data-debt-card-id="${debt.id}" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid #ef4444; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+      <div class="card" data-debt-card-id="${debt.id}" style="margin-bottom: 15px; padding: 20px; background: white; border-left: 5px solid ${hasLinkedGoal ? '#10b981' : '#ef4444'}; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+        ${hasLinkedGoal ? `
+        <div style="background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 24px;">🎯</span>
+          <div style="flex: 1;">
+            <p style="margin: 0; font-weight: 600; font-size: 14px;">Meta Activa: ${escapeHtml(linkedGoal.name)}</p>
+            <div style="background: rgba(255,255,255,0.3); height: 6px; border-radius: 3px; margin-top: 5px; overflow: hidden;">
+              <div style="background: white; height: 100%; width: ${goalProgress}%; transition: width 0.5s;"></div>
+            </div>
+            <p style="margin: 3px 0 0 0; font-size: 11px; opacity: 0.9;">${goalProgress}% completado • Fecha límite: ${linkedGoal.deadline}</p>
+          </div>
+          <button onclick="event.stopPropagation(); window.showGoalDetails('${linkedGoal.id}')" 
+                  style="background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap;">
+            Ver Meta
+          </button>
+        </div>
+        ` : ''}
         ${alerts.length > 0 ? `
         <div style="margin-bottom: 15px;">
           ${alerts.map(alert => `
