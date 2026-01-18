@@ -1081,6 +1081,23 @@
             </p>
             <div id="debtsList"></div>
           </div>
+
+          <!-- Deudas Completadas -->
+          <div style="margin-top: 30px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+              <h3 style="margin: 0;">✅ Deudas Completadas</h3>
+              <button 
+                id="togglePaidDebtsBtn" 
+                onclick="togglePaidDebts()"
+                style="background: #10b981; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                🔽 Mostrar
+              </button>
+            </div>
+            <p style="color: #666; margin-bottom: 15px; font-size: 14px;">
+              Aquí puedes consultar todas las deudas que ya has pagado completamente. ¡Felicitaciones! 🎉
+            </p>
+            <div id="paidDebtsList" style="display: none;"></div>
+          </div>
         </div>
 
         <!-- Inversiones -->

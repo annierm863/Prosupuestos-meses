@@ -577,3 +577,4 @@ Recomiendo empezar con **Fase 2 (Sistema de Transacciones)** porque:
 
 ¿Quieres que empiece con Fase 2 o prefieres otra fase?
 
+

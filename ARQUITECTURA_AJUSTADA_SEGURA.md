@@ -317,3 +317,4 @@ function calculateGoalStatus(goal) {
 
 **Cero riesgo, máxima compatibilidad, extensión pura.**
 
+

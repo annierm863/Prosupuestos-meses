@@ -551,3 +551,4 @@ El usuario tendrá:
 - ✅ Integración perfecta entre deudas y metas
 - ✅ Disciplina financiera automatizada con la regla 60/40
 
+

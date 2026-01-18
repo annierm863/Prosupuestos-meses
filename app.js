@@ -3275,12 +3275,49 @@ async function displayGoals(goals) {
       
       // CTA según tipo de meta
       let primaryCTA = "";
+      let detailedInfo = "";
+      
       if (goal.status === "COMPLETADA") {
         primaryCTA = '<button class="btn-small" style="background: #6366f1; color: white; width: 100%;" disabled>✅ Completada</button>';
       } else if (goal.type === "debt" && goal.linkedDebtId) {
         primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="registerPayment('${goal.linkedDebtId}')">💰 Registrar Pago</button>`;
       } else if (goal.type === "compound") {
-        primaryCTA = `<button class="btn-small" style="background: #3b82f6; color: white; width: 100%;" onclick="showGoalDetails('${goal.id}')">📋 Ver Plan</button>`;
+        // Para metas compuestas, mostrar desglose de deuda + ahorro
+        const savingsTarget = goal.savingsTarget || 0;
+        const debtTarget = goal.target - savingsTarget;
+        const currentDebtPaid = goal.currentDebtPaid || 0;
+        const currentSavings = goal.currentSavings || 0;
+        const debtProgress = debtTarget > 0 ? ((currentDebtPaid / debtTarget) * 100).toFixed(1) : 0;
+        const savingsProgress = savingsTarget > 0 ? ((currentSavings / savingsTarget) * 100).toFixed(1) : 0;
+        
+        detailedInfo = `
+          <div style="background: #f0f9ff; padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 2px solid #bae6fd;">
+            <div style="font-size: 12px; font-weight: 600; color: #0369a1; margin-bottom: 8px;">📊 Desglose Meta Compuesta</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="background: white; padding: 10px; border-radius: 6px; border-left: 3px solid #ef4444;">
+                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">💳 Pago de Deudas</div>
+                <div style="font-size: 14px; font-weight: bold; color: #ef4444; margin-bottom: 4px;">
+                  $${currentDebtPaid.toFixed(2)} / $${debtTarget.toFixed(2)}
+                </div>
+                <div style="font-size: 11px; color: #666;">${debtProgress}% completado</div>
+                <div style="width: 100%; height: 6px; background: #fee2e2; border-radius: 3px; margin-top: 6px; overflow: hidden;">
+                  <div style="width: ${Math.min(debtProgress, 100)}%; height: 100%; background: #ef4444; transition: width 0.3s;"></div>
+                </div>
+              </div>
+              <div style="background: white; padding: 10px; border-radius: 6px; border-left: 3px solid #10b981;">
+                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">💰 Ahorro</div>
+                <div style="font-size: 14px; font-weight: bold; color: #10b981; margin-bottom: 4px;">
+                  $${currentSavings.toFixed(2)} / $${savingsTarget.toFixed(2)}
+                </div>
+                <div style="font-size: 11px; color: #666;">${savingsProgress}% completado</div>
+                <div style="width: 100%; height: 6px; background: #d1fae5; border-radius: 3px; margin-top: 6px; overflow: hidden;">
+                  <div style="width: ${Math.min(savingsProgress, 100)}%; height: 100%; background: #10b981; transition: width 0.3s;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        primaryCTA = `<button class="btn-small" style="background: #3b82f6; color: white; width: 100%;" onclick="showGoalDetails('${goal.id}')">📋 Ver Plan Completo</button>`;
       } else {
         primaryCTA = `<button class="btn-small" style="background: #10b981; color: white; width: 100%;" onclick="showContributionModal('${goal.id}')">💰 Registrar Aporte</button>`;
       }
@@ -3305,6 +3342,9 @@ async function displayGoals(goals) {
                   <div style="font-size: 18px; font-weight: bold; color: #333;">$${remaining.toFixed(2)}</div>
                 </div>
               </div>
+              
+              <!-- Desglose de meta compuesta si aplica -->
+              ${detailedInfo}
               
               <!-- Información detallada -->
               <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
@@ -6531,9 +6571,17 @@ window.confirmPayment = async function () {
     
     // Actualizar el monto de la deuda
     const newAmount = Math.max(0, debt.amount - amount);
-    await updateDoc(doc(db, "liabilities", currentPaymentDebtId), {
+    const updateData = {
       amount: newAmount,
-    });
+    };
+    
+    // Si la deuda se pagó completamente, registrar la fecha de completación
+    if (newAmount === 0 && debt.amount > 0) {
+      updateData.completionDate = paymentDate;
+      updateData.completedAt = Timestamp.now();
+    }
+    
+    await updateDoc(doc(db, "liabilities", currentPaymentDebtId), updateData);
 
     cache.clear("liabilities");
     
@@ -6597,11 +6645,61 @@ window.confirmPayment = async function () {
       // No fallar el pago si hay error en la sincronización
     }
     
+    // *** NUEVA FUNCIONALIDAD: Actualizar metas compuestas ***
+    try {
+      const goals = await getGoals();
+      if (Array.isArray(goals)) {
+        // Buscar metas compuestas activas
+        const compoundGoals = goals.filter(g => 
+          g.type === 'Compuesta' && 
+          g.isActive !== false &&
+          !g.isArchived
+        );
+        
+        for (const compoundGoal of compoundGoals) {
+          // Calcular el total de deudas activas
+          const activeDebts = await loadDebts();
+          const totalActiveDebt = activeDebts.reduce((sum, d) => sum + d.amount, 0);
+          
+          // Calcular cuánto se ha pagado de deudas en total
+          const allDebts = await loadLiabilities();
+          const totalOriginalDebt = allDebts.reduce((sum, d) => sum + (d.originalAmount || d.amount || 0), 0);
+          const totalPaidDebt = totalOriginalDebt - totalActiveDebt;
+          
+          // Actualizar el componente de deuda de la meta compuesta
+          // Si la meta compuesta tiene savingsTarget, el resto es el target de deuda
+          const savingsTarget = compoundGoal.savingsTarget || 0;
+          const debtTarget = compoundGoal.target - savingsTarget;
+          
+          // El current total es: deuda pagada + ahorros actuales
+          const currentSavings = compoundGoal.currentSavings || 0;
+          const newCurrent = Math.min(totalPaidDebt, debtTarget) + currentSavings;
+          
+          await updateDoc(doc(db, "goals", compoundGoal.id), {
+            current: newCurrent,
+            currentDebtPaid: Math.min(totalPaidDebt, debtTarget),
+            updatedAt: Timestamp.now()
+          });
+          
+          console.log(`Meta compuesta "${compoundGoal.name}" actualizada: $${newCurrent.toFixed(2)}`);
+        }
+        
+        cache.clear("goals");
+      }
+    } catch (compoundError) {
+      console.warn("Error actualizando metas compuestas:", compoundError);
+    }
+    
     closePaymentModal();
     await displayDebts();
     await loadNetworth();
     await loadGoals(); // Recargar metas para actualizar estado
-    showMessage(`✅ Pago de $${amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} registrado exitosamente`, "success");
+    
+    if (newAmount === 0) {
+      showMessage(`🎉 ¡Felicitaciones! Has pagado completamente la deuda "${debt.name || 'Deuda'}"`, "success");
+    } else {
+      showMessage(`✅ Pago de $${amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} registrado exitosamente`, "success");
+    }
   } catch (error) {
     handleError(error, "confirmPayment");
   } finally {
@@ -6745,8 +6843,99 @@ window.deletePayment = async function (paymentId, debtId) {
 async function loadDebts() {
   if (!currentUser) return [];
   const liabilities = await loadLiabilities();
+  // Solo retornar deudas con balance mayor a 0 (deudas activas)
   return liabilities.filter((l) => l.amount > 0);
 }
+
+// Nueva función para cargar deudas pagadas
+async function loadPaidDebts() {
+  if (!currentUser) return [];
+  const liabilities = await loadLiabilities();
+  // Solo retornar deudas con balance en 0 (deudas pagadas)
+  return liabilities.filter((l) => l.amount === 0 && l.originalAmount > 0);
+}
+
+// Función para mostrar/ocultar deudas pagadas
+window.togglePaidDebts = async function() {
+  const paidDebtsContainer = document.getElementById("paidDebtsList");
+  const toggleBtn = document.getElementById("togglePaidDebtsBtn");
+  
+  if (paidDebtsContainer.style.display === "none") {
+    // Mostrar deudas pagadas
+    try {
+      showLoading("Cargando deudas pagadas...");
+      const paidDebts = await loadPaidDebts();
+      
+      if (paidDebts.length === 0) {
+        paidDebtsContainer.innerHTML = `
+          <div style="background: #f0fdf4; padding: 20px; border-radius: 10px; text-align: center; border: 2px dashed #10b981;">
+            <p style="color: #059669; margin: 0; font-size: 14px;">🎯 Aún no has completado ninguna deuda. ¡Sigue trabajando en tu plan!</p>
+          </div>
+        `;
+      } else {
+        const paidDebtsHTML = paidDebts.map(debt => {
+          const completionDate = debt.completionDate || 'Fecha no registrada';
+          const totalPaid = debt.originalAmount || 0;
+          
+          return `
+            <div class="card" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-left: 5px solid #10b981; position: relative; opacity: 0.9;">
+              <div style="position: absolute; top: 10px; right: 10px; background: #10b981; color: white; padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: bold;">
+                ✅ PAGADA
+              </div>
+              
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <span style="font-size: 32px;">🎉</span>
+                <div>
+                  <h4 style="margin: 0; color: #065f46; font-size: 16px;">${escapeHtml(debt.name || 'Deuda sin nombre')}</h4>
+                  <p style="margin: 5px 0 0 0; color: #047857; font-size: 13px;">${escapeHtml(debt.type || 'Deuda')}</p>
+                </div>
+              </div>
+              
+              <div style="background: rgba(255,255,255,0.6); padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div>
+                    <p style="color: #047857; font-size: 11px; margin: 0; font-weight: 600;">💰 Monto Original</p>
+                    <p style="color: #065f46; font-size: 18px; font-weight: bold; margin: 5px 0 0 0;">$${totalPaid.toLocaleString("es-ES", { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div>
+                    <p style="color: #047857; font-size: 11px; margin: 0; font-weight: 600;">📅 Completada</p>
+                    <p style="color: #065f46; font-size: 14px; font-weight: bold; margin: 5px 0 0 0;">${typeof completionDate === 'string' ? completionDate : new Date(completionDate).toLocaleDateString("es-ES")}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button onclick="showPaymentHistory('${debt.id}')" style="flex: 1; background: #059669; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                  📊 Ver Historial
+                </button>
+                <button onclick="showDebtDetails('${debt.id}')" style="flex: 1; background: #0891b2; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                  📋 Ver Detalles
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        paidDebtsContainer.innerHTML = paidDebtsHTML;
+      }
+      
+      paidDebtsContainer.style.display = "block";
+      toggleBtn.innerHTML = "🔼 Ocultar";
+      toggleBtn.style.background = "#ef4444";
+      
+    } catch (error) {
+      console.error("Error cargando deudas pagadas:", error);
+      showMessage("Error al cargar deudas pagadas", "error");
+    } finally {
+      hideLoading();
+    }
+  } else {
+    // Ocultar deudas pagadas
+    paidDebtsContainer.style.display = "none";
+    toggleBtn.innerHTML = "🔽 Mostrar";
+    toggleBtn.style.background = "#10b981";
+  }
+};
 
 // Mostrar detalles de una deuda específica - DEBE estar definida antes de displayDebts
 window.showDebtDetails = async function (debtId) {
