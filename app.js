@@ -4266,11 +4266,11 @@ async function getGoalActions(goalId) {
     const cached = cache.get("goalActions", goalId);
     if (cached) return cached;
     
+    // Query simplificado sin orderBy para evitar índice compuesto
     const q = query(
       collection(db, "goalActions"),
       where("goalId", "==", goalId),
-      where("userId", "==", currentUser.uid),
-      orderBy("createdAt", "asc")
+      where("userId", "==", currentUser.uid)
     );
     
     const snapshot = await getDocs(q);
@@ -4278,6 +4278,13 @@ async function getGoalActions(goalId) {
     
     snapshot.forEach((doc) => {
       actions.push({ id: doc.id, ...doc.data() });
+    });
+    
+    // Ordenar en JavaScript
+    actions.sort((a, b) => {
+      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return timeA - timeB; // asc
     });
     
     cache.set("goalActions", actions, goalId);
@@ -5232,11 +5239,11 @@ async function getGoalTransactions(goalId, weeks = null) {
     const cached = cache.get("goalTransactions", cacheKey);
     if (cached) return cached;
     
+    // Query simplificado sin orderBy para evitar necesidad de índice compuesto
     const q = query(
       collection(db, "goalTransactions"),
       where("goalId", "==", goalId),
-      where("userId", "==", currentUser.uid),
-      orderBy("date", "desc")
+      where("userId", "==", currentUser.uid)
     );
     
     const snapshot = await getDocs(q);
@@ -5249,6 +5256,13 @@ async function getGoalTransactions(goalId, weeks = null) {
         ...data,
         date: data.date || (data.createdAt?.toDate ? data.createdAt.toDate().toISOString().split("T")[0] : null)
       });
+    });
+    
+    // Ordenar en JavaScript en lugar de Firestore
+    transactions.sort((a, b) => {
+      const dateA = new Date(a.date || 0);
+      const dateB = new Date(b.date || 0);
+      return dateB - dateA; // desc
     });
     
     // Filtrar por semanas si se especifica
